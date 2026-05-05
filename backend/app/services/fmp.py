@@ -42,57 +42,98 @@ async def _get(path: str, **kwargs) -> Any:
 async def get_profile(ticker: str) -> dict:
     try:
         data = await _get("/profile", symbol=ticker.upper())
-        return data[0] if data else {}
+        if data:
+            return data[0]
     except Exception as exc:
-        _log.warning("FMP profile failed for %s: %s", ticker, exc)
+        _log.warning("FMP profile failed for %s: %s — trying yfinance", ticker, exc)
+    try:
+        return await yf.get_profile(ticker)
+    except Exception as exc:
+        _log.warning("yfinance profile also failed for %s: %s", ticker, exc)
         return {}
 
 
 async def get_key_metrics(ticker: str, limit: int = 5) -> list[dict]:
     try:
-        return await _get("/key-metrics", symbol=ticker.upper(), limit=limit)
+        data = await _get("/key-metrics", symbol=ticker.upper(), limit=limit)
+        if data:
+            return data
     except Exception as exc:
-        _log.warning("FMP key-metrics failed for %s: %s", ticker, exc)
+        _log.warning("FMP key-metrics failed for %s: %s — trying yfinance", ticker, exc)
+    try:
+        return await yf.get_key_metrics(ticker, limit=limit)
+    except Exception as exc:
+        _log.warning("yfinance key-metrics also failed for %s: %s", ticker, exc)
         return []
 
 
 async def get_ratios(ticker: str, limit: int = 5) -> list[dict]:
     try:
-        return await _get("/ratios", symbol=ticker.upper(), limit=limit)
+        data = await _get("/ratios", symbol=ticker.upper(), limit=limit)
+        if data:
+            return data
     except Exception as exc:
-        _log.warning("FMP ratios failed for %s: %s", ticker, exc)
+        _log.warning("FMP ratios failed for %s: %s — trying yfinance", ticker, exc)
+    try:
+        return await yf.get_ratios(ticker, limit=limit)
+    except Exception as exc:
+        _log.warning("yfinance ratios also failed for %s: %s", ticker, exc)
         return []
 
 
 async def get_income_statement(ticker: str, limit: int = 5, period: str = "annual") -> list[dict]:
     try:
-        return await _get("/income-statement", symbol=ticker.upper(), limit=limit, period=period)
+        data = await _get("/income-statement", symbol=ticker.upper(), limit=limit, period=period)
+        if data:
+            return data
     except Exception as exc:
-        _log.warning("FMP income failed for %s: %s", ticker, exc)
+        _log.warning("FMP income failed for %s: %s — trying yfinance", ticker, exc)
+    try:
+        return await yf.get_income_statement(ticker, limit=limit, period=period)
+    except Exception as exc:
+        _log.warning("yfinance income also failed for %s: %s", ticker, exc)
         return []
 
 
 async def get_balance_sheet(ticker: str, limit: int = 5, period: str = "annual") -> list[dict]:
     try:
-        return await _get("/balance-sheet-statement", symbol=ticker.upper(), limit=limit, period=period)
+        data = await _get("/balance-sheet-statement", symbol=ticker.upper(), limit=limit, period=period)
+        if data:
+            return data
     except Exception as exc:
-        _log.warning("FMP balance failed for %s: %s", ticker, exc)
+        _log.warning("FMP balance failed for %s: %s — trying yfinance", ticker, exc)
+    try:
+        return await yf.get_balance_sheet(ticker, limit=limit, period=period)
+    except Exception as exc:
+        _log.warning("yfinance balance also failed for %s: %s", ticker, exc)
         return []
 
 
 async def get_cash_flow(ticker: str, limit: int = 5, period: str = "annual") -> list[dict]:
     try:
-        return await _get("/cash-flow-statement", symbol=ticker.upper(), limit=limit, period=period)
+        data = await _get("/cash-flow-statement", symbol=ticker.upper(), limit=limit, period=period)
+        if data:
+            return data
     except Exception as exc:
-        _log.warning("FMP cashflow failed for %s: %s", ticker, exc)
+        _log.warning("FMP cashflow failed for %s: %s — trying yfinance", ticker, exc)
+    try:
+        return await yf.get_cash_flow(ticker, limit=limit, period=period)
+    except Exception as exc:
+        _log.warning("yfinance cashflow also failed for %s: %s", ticker, exc)
         return []
 
 
 async def get_financial_growth(ticker: str, limit: int = 5) -> list[dict]:
     try:
-        return await _get("/financial-growth", symbol=ticker.upper(), limit=limit)
+        data = await _get("/financial-growth", symbol=ticker.upper(), limit=limit)
+        if data:
+            return data
     except Exception as exc:
-        _log.warning("FMP growth failed for %s: %s", ticker, exc)
+        _log.warning("FMP growth failed for %s: %s — trying yfinance", ticker, exc)
+    try:
+        return await yf.get_financial_growth(ticker, limit=limit)
+    except Exception as exc:
+        _log.warning("yfinance growth also failed for %s: %s", ticker, exc)
         return []
 
 
