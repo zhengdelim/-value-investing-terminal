@@ -1,3 +1,4 @@
+import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .config import get_settings
@@ -32,3 +33,20 @@ app.include_router(watchlist.router, prefix="/api/watchlist", tags=["watchlist"]
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/debug/fmp")
+async def debug_fmp():
+    key = settings.fmp_api_key or ""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            url = f"https://financialmodelingprep.com/stable/profile?symbol=AAPL&apikey={key}"
+            r = await client.get(url)
+            return {
+                "key_length": len(key),
+                "key_prefix": key[:6] if key else "",
+                "status_code": r.status_code,
+                "response": r.json(),
+            }
+    except Exception as exc:
+        return {"key_length": len(key), "key_prefix": key[:6] if key else "", "error": str(exc)}
