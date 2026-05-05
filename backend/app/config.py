@@ -4,6 +4,7 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     fmp_api_key: str = ""
+    polygon_api_key: str = ""
     anthropic_api_key: str = ""
     database_url: str = "postgresql://valuescreen:valuescreen_pass@localhost:5432/valuescreen"
     redis_url: str = "redis://localhost:6379"

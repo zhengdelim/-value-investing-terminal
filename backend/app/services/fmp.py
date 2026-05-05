@@ -3,6 +3,7 @@ import logging
 from typing import Any, Optional
 from ..config import get_settings
 from . import yf_service as yf
+from . import polygon_service as polygon
 
 settings = get_settings()
 BASE = "https://financialmodelingprep.com/stable"
@@ -47,10 +48,17 @@ async def get_profile(ticker: str) -> dict:
     except Exception as exc:
         _log.warning("FMP profile failed for %s: %s — trying yfinance", ticker, exc)
     try:
-        return await yf.get_profile(ticker)
+        result = await yf.get_profile(ticker)
+        if result:
+            return result
     except Exception as exc:
-        _log.warning("yfinance profile also failed for %s: %s", ticker, exc)
-        return {}
+        _log.warning("yfinance profile failed for %s: %s — trying polygon", ticker, exc)
+    if settings.polygon_api_key:
+        try:
+            return await polygon.get_profile(ticker, settings.polygon_api_key)
+        except Exception as exc:
+            _log.warning("polygon profile also failed for %s: %s", ticker, exc)
+    return {}
 
 
 async def get_key_metrics(ticker: str, limit: int = 5) -> list[dict]:
@@ -89,10 +97,17 @@ async def get_income_statement(ticker: str, limit: int = 5, period: str = "annua
     except Exception as exc:
         _log.warning("FMP income failed for %s: %s — trying yfinance", ticker, exc)
     try:
-        return await yf.get_income_statement(ticker, limit=limit, period=period)
+        result = await yf.get_income_statement(ticker, limit=limit, period=period)
+        if result:
+            return result
     except Exception as exc:
-        _log.warning("yfinance income also failed for %s: %s", ticker, exc)
-        return []
+        _log.warning("yfinance income failed for %s: %s — trying polygon", ticker, exc)
+    if settings.polygon_api_key:
+        try:
+            return await polygon.get_income_statement(ticker, settings.polygon_api_key, limit=limit, period=period)
+        except Exception as exc:
+            _log.warning("polygon income also failed for %s: %s", ticker, exc)
+    return []
 
 
 async def get_balance_sheet(ticker: str, limit: int = 5, period: str = "annual") -> list[dict]:
@@ -103,10 +118,17 @@ async def get_balance_sheet(ticker: str, limit: int = 5, period: str = "annual")
     except Exception as exc:
         _log.warning("FMP balance failed for %s: %s — trying yfinance", ticker, exc)
     try:
-        return await yf.get_balance_sheet(ticker, limit=limit, period=period)
+        result = await yf.get_balance_sheet(ticker, limit=limit, period=period)
+        if result:
+            return result
     except Exception as exc:
-        _log.warning("yfinance balance also failed for %s: %s", ticker, exc)
-        return []
+        _log.warning("yfinance balance failed for %s: %s — trying polygon", ticker, exc)
+    if settings.polygon_api_key:
+        try:
+            return await polygon.get_balance_sheet(ticker, settings.polygon_api_key, limit=limit, period=period)
+        except Exception as exc:
+            _log.warning("polygon balance also failed for %s: %s", ticker, exc)
+    return []
 
 
 async def get_cash_flow(ticker: str, limit: int = 5, period: str = "annual") -> list[dict]:
@@ -117,10 +139,17 @@ async def get_cash_flow(ticker: str, limit: int = 5, period: str = "annual") -> 
     except Exception as exc:
         _log.warning("FMP cashflow failed for %s: %s — trying yfinance", ticker, exc)
     try:
-        return await yf.get_cash_flow(ticker, limit=limit, period=period)
+        result = await yf.get_cash_flow(ticker, limit=limit, period=period)
+        if result:
+            return result
     except Exception as exc:
-        _log.warning("yfinance cashflow also failed for %s: %s", ticker, exc)
-        return []
+        _log.warning("yfinance cashflow failed for %s: %s — trying polygon", ticker, exc)
+    if settings.polygon_api_key:
+        try:
+            return await polygon.get_cash_flow(ticker, settings.polygon_api_key, limit=limit, period=period)
+        except Exception as exc:
+            _log.warning("polygon cashflow also failed for %s: %s", ticker, exc)
+    return []
 
 
 async def get_financial_growth(ticker: str, limit: int = 5) -> list[dict]:
