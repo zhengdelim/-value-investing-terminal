@@ -68,14 +68,16 @@ async def _upsert_financials(ticker: str, db: Session, period: str = "annual") -
     cashflow = await fmp.get_cash_flow(t, limit=limit, period=fmp_period)
 
     bal_by_date = {r.get("date"): r for r in balance}
-    cf_by_date = {r.get("date"): r for r in cashflow}
+    bal_by_year = {r.get("date", "")[:4]: r for r in reversed(balance) if r.get("date")}
+    cf_by_date  = {r.get("date"): r for r in cashflow}
+    cf_by_year  = {r.get("date", "")[:4]: r for r in reversed(cashflow) if r.get("date")}
 
     db.query(Financial).filter(Financial.ticker == t, Financial.period == period).delete()
 
     for inc in income:
-        d = inc.get("date")
-        bal = bal_by_date.get(d, {})
-        cf = cf_by_date.get(d, {})
+        d = inc.get("date") or ""
+        bal = bal_by_date.get(d) or bal_by_year.get(d[:4], {})
+        cf  = cf_by_date.get(d)  or cf_by_year.get(d[:4], {})
         db.add(_build_record(t, period, inc, bal, cf))
 
     db.commit()

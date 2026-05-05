@@ -294,7 +294,7 @@ async def _fetch_index_polygon(client: httpx.AsyncClient, idx: dict, api_key: st
     if not sym or not api_key:
         return None
     try:
-        url = f"https://api.polygon.io/v3/snapshot?ticker.any_of={sym}&apiKey={api_key}"
+        url = f"https://api.polygon.io/v3/snapshot/indices?ticker.any_of={sym}&apiKey={api_key}"
         r = await client.get(url, timeout=8.0)
         r.raise_for_status()
         results = r.json().get("results", [])

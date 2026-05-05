@@ -12,6 +12,7 @@ from ..models.stock import Stock, Financial
 from ..schemas.stock import StockSummary, StockDetail
 from ..services import fmp, cache
 from ..services import scores as score_svc
+from .financials import _build_record
 
 router = APIRouter()
 
@@ -29,12 +30,12 @@ async def _refresh_stock(ticker: str, db: Session) -> Stock:
 
     profile, ratios, growth, metrics, income, balance, cashflow = (
         await fmp.get_profile(t),
-        await fmp.get_ratios(t, limit=2),
+        await fmp.get_ratios(t, limit=5),
         await fmp.get_financial_growth(t, limit=1),
         await fmp.get_key_metrics(t, limit=1),
-        await fmp.get_income_statement(t, limit=2),
-        await fmp.get_balance_sheet(t, limit=2),
-        await fmp.get_cash_flow(t, limit=2),
+        await fmp.get_income_statement(t, limit=5),
+        await fmp.get_balance_sheet(t, limit=5),
+        await fmp.get_cash_flow(t, limit=5),
     )
 
     if not profile:
@@ -175,6 +176,25 @@ async def _refresh_stock(ticker: str, db: Session) -> Stock:
 
     db.commit()
     db.refresh(stock)
+
+    # Populate Financial table so charts and DCF work without a separate API call
+    try:
+        bal_by_date = {r.get("date"): r for r in balance}
+        bal_by_year = {r.get("date", "")[:4]: r for r in reversed(balance) if r.get("date")}
+        cf_by_date  = {r.get("date"): r for r in cashflow}
+        cf_by_year  = {r.get("date", "")[:4]: r for r in reversed(cashflow) if r.get("date")}
+
+        db.query(Financial).filter(Financial.ticker == t, Financial.period == "annual").delete()
+        for inc in income:
+            d = inc.get("date") or ""
+            b = bal_by_date.get(d) or bal_by_year.get(d[:4], {})
+            c = cf_by_date.get(d)  or cf_by_year.get(d[:4], {})
+            db.add(_build_record(t, "annual", inc, b, c))
+        db.commit()
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Financial records seed failed for %s: %s", t, exc)
+
     return stock
 
 
