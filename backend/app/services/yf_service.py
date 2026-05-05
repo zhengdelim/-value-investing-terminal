@@ -194,25 +194,36 @@ def _historical_ratios(symbol: str) -> list[dict]:
 
 
 async def get_ratios(ticker: str, limit: int = 5) -> list[dict]:
-    rows = await _run_sync(_historical_ratios, ticker.upper())
-    if rows:
-        return rows[:limit]
-    # final fallback: single current-snapshot record
-    info = await _run_sync(_ticker_info, ticker.upper())
-    r = _map_ratios(info)
-    return [r] if r else []
+    try:
+        rows = await _run_sync(_historical_ratios, ticker.upper())
+        if rows:
+            return rows[:limit]
+    except Exception:
+        pass
+    try:
+        info = await _run_sync(_ticker_info, ticker.upper())
+        r = _map_ratios(info)
+        return [r] if r else []
+    except Exception:
+        return []
 
 
 async def get_key_metrics(ticker: str, limit: int = 1) -> list[dict]:
-    info = await _run_sync(_ticker_info, ticker.upper())
-    m = _map_metrics(info)
-    return [m] if m else []
+    try:
+        info = await _run_sync(_ticker_info, ticker.upper())
+        m = _map_metrics(info)
+        return [m] if m else []
+    except Exception:
+        return []
 
 
 async def get_financial_growth(ticker: str, limit: int = 1) -> list[dict]:
-    info = await _run_sync(_ticker_info, ticker.upper())
-    g = _map_growth(info)
-    return [g] if g else []
+    try:
+        info = await _run_sync(_ticker_info, ticker.upper())
+        g = _map_growth(info)
+        return [g] if g else []
+    except Exception:
+        return []
 
 
 def _income_quarterly(symbol: str) -> list[dict]:
