@@ -274,17 +274,17 @@ _INDICES = [
 
 async def _fetch_index_fmp(client: httpx.AsyncClient, idx: dict, api_key: str) -> dict:
     try:
-        url = f"https://financialmodelingprep.com/api/v3/quote/{idx['fmp_symbol']}?apikey={api_key}"
+        url = f"https://financialmodelingprep.com/stable/quote?symbol={idx['fmp_symbol']}&apikey={api_key}"
         r = await client.get(url, timeout=8.0)
         r.raise_for_status()
         data = r.json()
         if not data:
             raise ValueError("Empty response")
-        q = data[0]
+        q = data[0] if isinstance(data, list) else data
         price = q.get("price")
-        prev  = q.get("previousClose")
+        prev  = q.get("previousClose") or q.get("prevClose")
         chg   = q.get("change")
-        pct   = q.get("changesPercentage")
+        pct   = q.get("changesPercentage") or q.get("changePercent") or q.get("changePercentage")
         return {
             **idx,
             "price":        round(price, 2) if price is not None else None,
