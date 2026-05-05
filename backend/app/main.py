@@ -50,3 +50,22 @@ async def debug_fmp():
             }
     except Exception as exc:
         return {"key_length": len(key), "key_prefix": key[:6] if key else "", "error": str(exc)}
+
+
+@app.get("/api/debug/polygon")
+async def debug_polygon():
+    key = settings.polygon_api_key or ""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(
+                f"https://api.polygon.io/v3/reference/tickers/AAPL",
+                params={"apiKey": key},
+            )
+            return {
+                "key_length": len(key),
+                "key_prefix": key[:6] if key else "",
+                "status_code": r.status_code,
+                "response": r.json(),
+            }
+    except Exception as exc:
+        return {"key_length": len(key), "key_prefix": key[:6] if key else "", "error": str(exc)}
