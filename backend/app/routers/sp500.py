@@ -180,3 +180,10 @@ async def get_seed_progress():
         return {"running": False, "done": 0, "total": 0, "pct": 0,
                 "success": [], "failed": []}
     return p
+
+
+@router.post("/reset")
+async def reset_seed():
+    cache_set(_PROGRESS_KEY, {"running": False, "done": 0, "total": 0,
+                               "pct": 0, "success": [], "failed": []}, ttl=60)
+    return {"status": "reset"}
