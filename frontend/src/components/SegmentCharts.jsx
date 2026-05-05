@@ -121,7 +121,15 @@ export function ProductSegmentCharts({ data, isLoading }) {
 }
 
 export function GeoSegmentCharts({ data, isLoading }) {
-  if (isLoading || !data?.geographic?.length) return null;
+  if (isLoading) return null;
+  if (!data?.geographic?.length) {
+    return (
+      <div>
+        <h3 className="text-sm font-semibold text-gray-300 mb-3">Geographic Revenue</h3>
+        <p className="text-xs text-muted">Geographic segment data not available for this ticker.</p>
+      </div>
+    );
+  }
   return (
     <div>
       <h3 className="text-sm font-semibold text-gray-300 mb-3">Geographic Revenue</h3>

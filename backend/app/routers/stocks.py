@@ -178,22 +178,33 @@ async def _refresh_stock(ticker: str, db: Session) -> Stock:
     db.refresh(stock)
 
     # Populate Financial table so charts and DCF work without a separate API call
-    try:
-        bal_by_date = {r.get("date"): r for r in balance}
-        bal_by_year = {r.get("date", "")[:4]: r for r in reversed(balance) if r.get("date")}
-        cf_by_date  = {r.get("date"): r for r in cashflow}
-        cf_by_year  = {r.get("date", "")[:4]: r for r in reversed(cashflow) if r.get("date")}
+    _log = __import__("logging").getLogger(__name__)
 
-        db.query(Financial).filter(Financial.ticker == t, Financial.period == "annual").delete()
-        for inc in income:
+    def _seed_financials(period_label, inc_rows, bal_rows, cf_rows):
+        bal_by_date = {r.get("date"): r for r in bal_rows}
+        bal_by_year = {r.get("date", "")[:4]: r for r in reversed(bal_rows) if r.get("date")}
+        cf_by_date  = {r.get("date"): r for r in cf_rows}
+        cf_by_year  = {r.get("date", "")[:4]: r for r in reversed(cf_rows) if r.get("date")}
+        db.query(Financial).filter(Financial.ticker == t, Financial.period == period_label).delete()
+        for inc in inc_rows:
             d = inc.get("date") or ""
             b = bal_by_date.get(d) or bal_by_year.get(d[:4], {})
             c = cf_by_date.get(d)  or cf_by_year.get(d[:4], {})
-            db.add(_build_record(t, "annual", inc, b, c))
+            db.add(_build_record(t, period_label, inc, b, c))
         db.commit()
+
+    try:
+        _seed_financials("annual", income, balance, cashflow)
     except Exception as exc:
-        import logging
-        logging.getLogger(__name__).warning("Financial records seed failed for %s: %s", t, exc)
+        _log.warning("Annual financial seed failed for %s: %s", t, exc)
+
+    try:
+        inc_q  = await fmp.get_income_statement(t, limit=20, period="quarter")
+        bal_q  = await fmp.get_balance_sheet(t,     limit=20, period="quarter")
+        cf_q   = await fmp.get_cash_flow(t,          limit=20, period="quarter")
+        _seed_financials("quarter", inc_q, bal_q, cf_q)
+    except Exception as exc:
+        _log.warning("Quarterly financial seed failed for %s: %s", t, exc)
 
     return stock
 

@@ -39,7 +39,11 @@ async def get_dcf(
         .first()
     )
 
-    base_fcf = latest_fin.fcf if latest_fin and latest_fin.fcf else None
+    base_fcf = None
+    if latest_fin:
+        base_fcf = latest_fin.fcf
+        if not base_fcf and latest_fin.operating_cash_flow and latest_fin.capex:
+            base_fcf = latest_fin.operating_cash_flow + latest_fin.capex  # capex is negative
     if not base_fcf:
         raise HTTPException(status_code=422, detail=f"No FCF data available for {t}")
 
