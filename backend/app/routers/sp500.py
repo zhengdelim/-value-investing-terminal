@@ -127,8 +127,8 @@ def _finish_progress():
 
 async def _seed_all(tickers: list[str]):
     _reset_progress(len(tickers))
-    # Process in batches of 5 concurrently to avoid hammering yfinance
-    batch = 5
+    # Process one at a time with delay to stay within FMP free plan limits
+    batch = 1
     for i in range(0, len(tickers), batch):
         chunk = tickers[i:i + batch]
         db = SessionLocal()
@@ -137,7 +137,7 @@ async def _seed_all(tickers: list[str]):
             await asyncio.gather(*tasks)
         finally:
             db.close()
-        await asyncio.sleep(0.5)  # gentle pacing
+        await asyncio.sleep(2)  # 2s delay = ~30 stocks/min, well within 300 req/min
     _finish_progress()
     _log.info("S&P 500 seed complete.")
 
