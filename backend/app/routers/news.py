@@ -315,8 +315,37 @@ async def _fetch_index_polygon(client: httpx.AsyncClient, idx: dict, api_key: st
         return None
 
 
+async def _fetch_index_yahoo(client: httpx.AsyncClient, idx: dict) -> dict | None:
+    """Direct Yahoo Finance chart API — different endpoint from yfinance quoteSummary, less rate-limited."""
+    sym = idx["symbol"]  # already URL-encoded e.g. %5EGSPC
+    try:
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}"
+        r = await client.get(url, params={"range": "1d", "interval": "1d"}, timeout=8.0,
+                             headers={"User-Agent": "Mozilla/5.0"})
+        r.raise_for_status()
+        meta = r.json()["chart"]["result"][0]["meta"]
+        price = meta.get("regularMarketPrice")
+        if not price:
+            return None
+        prev  = meta.get("previousClose") or meta.get("chartPreviousClose")
+        chg   = round(price - prev, 2) if prev else None
+        pct   = round((price - prev) / prev * 100, 3) if prev else None
+        state = meta.get("marketState", "Unknown")
+        return _format_index(
+            idx, price, prev, chg, pct,
+            high=meta.get("regularMarketDayHigh"),
+            low=meta.get("regularMarketDayLow"),
+            open_=meta.get("regularMarketOpen"),
+            volume=meta.get("regularMarketVolume"),
+            active=state in ("REGULAR", "PRE", "POST"),
+        )
+    except Exception as exc:
+        _log.warning("Yahoo chart index fetch failed (%s): %s", sym, exc)
+        return None
+
+
 async def _fetch_index(client: httpx.AsyncClient, idx: dict, fmp_key: str, polygon_key: str) -> dict:
-    # Try FMP first
+    # 1. Try FMP
     try:
         url = f"https://financialmodelingprep.com/stable/quote?symbol={idx['fmp_symbol']}&apikey={fmp_key}"
         r = await client.get(url, timeout=8.0)
@@ -337,8 +366,13 @@ async def _fetch_index(client: httpx.AsyncClient, idx: dict, fmp_key: str, polyg
     except Exception as exc:
         _log.warning("FMP index fetch failed (%s): %s — trying Polygon", idx["symbol"], exc)
 
-    # Fallback to Polygon
+    # 2. Try Polygon (US indices only)
     result = await _fetch_index_polygon(client, idx, polygon_key)
+    if result:
+        return result
+
+    # 3. Try Yahoo Finance chart API (all indices including Asian)
+    result = await _fetch_index_yahoo(client, idx)
     if result:
         return result
 
@@ -348,7 +382,7 @@ async def _fetch_index(client: httpx.AsyncClient, idx: dict, fmp_key: str, polyg
 
 @router.get("/indices")
 async def get_indices():
-    key = make_key("market_indices_v2")
+    key = make_key("market_indices_v3")
     if cached := cache_get(key):
         return cached
 
