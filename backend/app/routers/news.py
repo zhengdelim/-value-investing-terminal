@@ -265,55 +265,98 @@ async def get_market_analysis():
 # ── Market Indices ────────────────────────────────────────────────────────────
 
 _INDICES = [
-    {"key": "sp500",  "symbol": "%5EGSPC",    "fmp_symbol": "%5EGSPC",    "label": "S&P 500", "currency": "USD"},
-    {"key": "nasdaq", "symbol": "%5EIXIC",    "fmp_symbol": "%5EIXIC",    "label": "Nasdaq",  "currency": "USD"},
-    {"key": "hstech", "symbol": "HSTECH.HK",  "fmp_symbol": "HSTECH.HK",  "label": "HS Tech", "currency": "HKD"},
-    {"key": "sti",    "symbol": "%5ESTI",     "fmp_symbol": "%5ESTI",     "label": "STI",     "currency": "SGD"},
+    {"key": "sp500",  "symbol": "%5EGSPC",   "fmp_symbol": "%5EGSPC",   "polygon_symbol": "I:SPX",  "label": "S&P 500", "currency": "USD"},
+    {"key": "nasdaq", "symbol": "%5EIXIC",   "fmp_symbol": "%5EIXIC",   "polygon_symbol": "I:COMP", "label": "Nasdaq",  "currency": "USD"},
+    {"key": "hstech", "symbol": "HSTECH.HK", "fmp_symbol": "HSTECH.HK", "polygon_symbol": None,     "label": "HS Tech", "currency": "HKD"},
+    {"key": "sti",    "symbol": "%5ESTI",    "fmp_symbol": "%5ESTI",    "polygon_symbol": None,     "label": "STI",     "currency": "SGD"},
 ]
 
+def _format_index(idx: dict, price, prev, chg, pct, high=None, low=None, open_=None, volume=None, active=None) -> dict:
+    def r2(v): return round(v, 2) if v is not None else None
+    def r3(v): return round(v, 3) if v is not None else None
+    return {
+        **idx,
+        "price":        r2(price),
+        "prev_close":   r2(prev),
+        "change":       r2(chg),
+        "change_pct":   r3(pct),
+        "day_high":     r2(high),
+        "day_low":      r2(low),
+        "open":         r2(open_),
+        "volume":       volume,
+        "market_state": ("Open" if active else "Closed") if active is not None else "Unknown",
+        "error":        None,
+    }
 
-async def _fetch_index_fmp(client: httpx.AsyncClient, idx: dict, api_key: str) -> dict:
+
+async def _fetch_index_polygon(client: httpx.AsyncClient, idx: dict, api_key: str) -> dict | None:
+    sym = idx.get("polygon_symbol")
+    if not sym or not api_key:
+        return None
     try:
-        url = f"https://financialmodelingprep.com/stable/quote?symbol={idx['fmp_symbol']}&apikey={api_key}"
+        url = f"https://api.polygon.io/v3/snapshot?ticker.any_of={sym}&apiKey={api_key}"
+        r = await client.get(url, timeout=8.0)
+        r.raise_for_status()
+        results = r.json().get("results", [])
+        if not results:
+            return None
+        q = results[0]
+        session = q.get("session", {})
+        price = q.get("value") or session.get("close")
+        prev  = session.get("previous_close")
+        chg   = session.get("change")
+        pct   = session.get("change_percent")
+        return _format_index(
+            idx, price, prev, chg, pct,
+            high=session.get("high"), low=session.get("low"), open_=session.get("open"),
+        )
+    except Exception as exc:
+        _log.warning("Polygon index fetch failed (%s): %s", sym, exc)
+        return None
+
+
+async def _fetch_index(client: httpx.AsyncClient, idx: dict, fmp_key: str, polygon_key: str) -> dict:
+    # Try FMP first
+    try:
+        url = f"https://financialmodelingprep.com/stable/quote?symbol={idx['fmp_symbol']}&apikey={fmp_key}"
         r = await client.get(url, timeout=8.0)
         r.raise_for_status()
         data = r.json()
-        if not data:
-            raise ValueError("Empty response")
-        q = data[0] if isinstance(data, list) else data
-        price = q.get("price")
-        prev  = q.get("previousClose") or q.get("prevClose")
-        chg   = q.get("change")
-        pct   = q.get("changesPercentage") or q.get("changePercent") or q.get("changePercentage")
-        return {
-            **idx,
-            "price":        round(price, 2) if price is not None else None,
-            "prev_close":   round(prev, 2)  if prev  is not None else None,
-            "change":       round(chg, 2)   if chg   is not None else None,
-            "change_pct":   round(pct, 3)   if pct   is not None else None,
-            "day_high":     round(q.get("dayHigh"), 2)  if q.get("dayHigh")  else None,
-            "day_low":      round(q.get("dayLow"), 2)   if q.get("dayLow")   else None,
-            "open":         round(q.get("open"), 2)     if q.get("open")     else None,
-            "volume":       q.get("volume"),
-            "market_state": "Open" if q.get("isActivelyTrading") else "Closed",
-            "error":        None,
-        }
+        if data:
+            q = data[0] if isinstance(data, list) else data
+            price = q.get("price")
+            if price:
+                return _format_index(
+                    idx, price,
+                    prev=q.get("previousClose") or q.get("prevClose"),
+                    chg=q.get("change"),
+                    pct=q.get("changesPercentage") or q.get("changePercent"),
+                    high=q.get("dayHigh"), low=q.get("dayLow"), open_=q.get("open"),
+                    volume=q.get("volume"), active=q.get("isActivelyTrading"),
+                )
     except Exception as exc:
-        _log.warning("Index fetch failed (%s): %s", idx["symbol"], exc)
-        return {**idx, "price": None, "change": None, "change_pct": None,
-                "market_state": "Unknown", "error": str(exc)}
+        _log.warning("FMP index fetch failed (%s): %s — trying Polygon", idx["symbol"], exc)
+
+    # Fallback to Polygon
+    result = await _fetch_index_polygon(client, idx, polygon_key)
+    if result:
+        return result
+
+    return {**idx, "price": None, "change": None, "change_pct": None,
+            "market_state": "Unknown", "error": "All sources failed"}
 
 
 @router.get("/indices")
 async def get_indices():
-    key = make_key("market_indices_v1")
+    key = make_key("market_indices_v2")
     if cached := cache_get(key):
         return cached
 
-    api_key = settings.fmp_api_key
+    fmp_key     = settings.fmp_api_key
+    polygon_key = settings.polygon_api_key
     async with httpx.AsyncClient() as client:
         results = await asyncio.gather(
-            *[_fetch_index_fmp(client, idx, api_key) for idx in _INDICES]
+            *[_fetch_index(client, idx, fmp_key, polygon_key) for idx in _INDICES]
         )
     data = list(results)
     cache_set(key, data, ttl=180)
