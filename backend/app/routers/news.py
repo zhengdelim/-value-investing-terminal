@@ -265,46 +265,38 @@ async def get_market_analysis():
 # ── Market Indices ────────────────────────────────────────────────────────────
 
 _INDICES = [
-    {"key": "sp500",  "symbol": "^GSPC",     "label": "S&P 500",    "currency": "USD"},
-    {"key": "nasdaq", "symbol": "^IXIC",     "label": "Nasdaq",     "currency": "USD"},
-    {"key": "hstech", "symbol": "HSTECH.HK", "label": "HS Tech",    "currency": "HKD"},
-    {"key": "sti",    "symbol": "^STI",      "label": "STI",        "currency": "SGD"},
+    {"key": "sp500",  "symbol": "%5EGSPC",    "fmp_symbol": "%5EGSPC",    "label": "S&P 500", "currency": "USD"},
+    {"key": "nasdaq", "symbol": "%5EIXIC",    "fmp_symbol": "%5EIXIC",    "label": "Nasdaq",  "currency": "USD"},
+    {"key": "hstech", "symbol": "HSTECH.HK",  "fmp_symbol": "HSTECH.HK",  "label": "HS Tech", "currency": "HKD"},
+    {"key": "sti",    "symbol": "%5ESTI",     "fmp_symbol": "%5ESTI",     "label": "STI",     "currency": "SGD"},
 ]
 
-_STATE_LABEL = {
-    "REGULAR":   "Open",
-    "PRE":       "Pre-market",
-    "POST":      "After-hours",
-    "POSTPOST":  "After-hours",
-    "PREPRE":    "Pre-market",
-    "CLOSED":    "Closed",
-}
 
-
-def _fetch_index_sync(idx: dict) -> dict:
+async def _fetch_index_fmp(client: httpx.AsyncClient, idx: dict, api_key: str) -> dict:
     try:
-        info  = yf.Ticker(idx["symbol"]).info
-        price = info.get("regularMarketPrice") or info.get("currentPrice")
-        prev  = info.get("regularMarketPreviousClose")
-        hi    = info.get("regularMarketDayHigh")
-        lo    = info.get("regularMarketDayLow")
-        open_ = info.get("regularMarketOpen")
-        vol   = info.get("regularMarketVolume")
-        state = info.get("marketState", "CLOSED")
-        chg   = (price - prev) if price is not None and prev else None
-        pct   = chg / prev * 100 if chg is not None and prev else None
+        url = f"https://financialmodelingprep.com/api/v3/quote/{idx['fmp_symbol']}?apikey={api_key}"
+        r = await client.get(url, timeout=8.0)
+        r.raise_for_status()
+        data = r.json()
+        if not data:
+            raise ValueError("Empty response")
+        q = data[0]
+        price = q.get("price")
+        prev  = q.get("previousClose")
+        chg   = q.get("change")
+        pct   = q.get("changesPercentage")
         return {
             **idx,
-            "price":       round(price, 2) if price is not None else None,
-            "prev_close":  round(prev, 2)  if prev  is not None else None,
-            "change":      round(chg, 2)   if chg   is not None else None,
-            "change_pct":  round(pct, 3)   if pct   is not None else None,
-            "day_high":    round(hi, 2)    if hi    is not None else None,
-            "day_low":     round(lo, 2)    if lo    is not None else None,
-            "open":        round(open_, 2) if open_ is not None else None,
-            "volume":      vol,
-            "market_state": _STATE_LABEL.get(state, state),
-            "error":       None,
+            "price":        round(price, 2) if price is not None else None,
+            "prev_close":   round(prev, 2)  if prev  is not None else None,
+            "change":       round(chg, 2)   if chg   is not None else None,
+            "change_pct":   round(pct, 3)   if pct   is not None else None,
+            "day_high":     round(q.get("dayHigh"), 2)  if q.get("dayHigh")  else None,
+            "day_low":      round(q.get("dayLow"), 2)   if q.get("dayLow")   else None,
+            "open":         round(q.get("open"), 2)     if q.get("open")     else None,
+            "volume":       q.get("volume"),
+            "market_state": "Open" if q.get("isActivelyTrading") else "Closed",
+            "error":        None,
         }
     except Exception as exc:
         _log.warning("Index fetch failed (%s): %s", idx["symbol"], exc)
@@ -318,12 +310,11 @@ async def get_indices():
     if cached := cache_get(key):
         return cached
 
-    loop = asyncio.get_event_loop()
-    results = await asyncio.gather(
-        *[loop.run_in_executor(None, functools.partial(_fetch_index_sync, idx))
-          for idx in _INDICES]
-    )
+    api_key = settings.fmp_api_key
+    async with httpx.AsyncClient() as client:
+        results = await asyncio.gather(
+            *[_fetch_index_fmp(client, idx, api_key) for idx in _INDICES]
+        )
     data = list(results)
-    # Cache 3 minutes during market hours — short enough to stay fresh
     cache_set(key, data, ttl=180)
     return data
