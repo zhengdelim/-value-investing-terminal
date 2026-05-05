@@ -49,7 +49,7 @@ async def get_profile(ticker: str) -> dict:
         _log.warning("FMP profile failed for %s: %s — trying yfinance", ticker, exc)
     try:
         result = await yf.get_profile(ticker)
-        if result:
+        if result and result.get("companyName"):
             return result
     except Exception as exc:
         _log.warning("yfinance profile failed for %s: %s — trying polygon", ticker, exc)

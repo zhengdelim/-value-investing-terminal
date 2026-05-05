@@ -26,11 +26,18 @@ async def get_profile(ticker: str, api_key: str) -> dict:
     try:
         details = await _get(f"/v3/reference/tickers/{ticker.upper()}", api_key)
         r = details.get("results", {})
-        snap_data = await _get(
-            f"/v2/snapshot/locale/us/markets/stocks/tickers/{ticker.upper()}", api_key
-        )
-        snap = snap_data.get("ticker", {})
-        price = snap.get("day", {}).get("c") or snap.get("lastTrade", {}).get("p")
+        if not r.get("name"):
+            return {}
+        # Snapshot is best-effort — price may be missing on free tier
+        price = None
+        try:
+            snap_data = await _get(
+                f"/v2/snapshot/locale/us/markets/stocks/tickers/{ticker.upper()}", api_key
+            )
+            snap = snap_data.get("ticker", {})
+            price = snap.get("day", {}).get("c") or snap.get("lastTrade", {}).get("p")
+        except Exception:
+            pass
         return {
             "companyName":  r.get("name", ""),
             "sector":       r.get("sic_description", ""),
