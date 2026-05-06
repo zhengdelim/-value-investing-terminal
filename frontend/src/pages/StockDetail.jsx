@@ -50,6 +50,7 @@ export default function StockDetail() {
 
   const [period, setPeriod] = useState("annual");
   const [quarterLimit, setQuarterLimit] = useState(20);
+  const [chartView, setChartView] = useState("figures");
 
   const { data: stock, isLoading, isError, refetch } = useStockDetail(ticker);
   const { data: financials, isLoading: finLoading } = useFinancials(ticker, period);
@@ -241,6 +242,21 @@ export default function StockDetail() {
               {p === "annual" ? "Annual" : "Quarterly"}
             </button>
           ))}
+          <span className="text-xs text-muted ml-2">Chart:</span>
+          {["figures", "growth"].map((v) => (
+            <button
+              key={v}
+              onClick={() => setChartView(v)}
+              className={clsx(
+                "text-xs px-3 py-1 rounded border transition-colors",
+                chartView === v
+                  ? "border-yellow/60 bg-yellow/10 text-yellow font-semibold"
+                  : "border-bg-border text-muted hover:text-gray-300 hover:border-gray-500"
+              )}
+            >
+              {v === "figures" ? "Figures" : "Growth %"}
+            </button>
+          ))}
           {period === "quarter" && (() => {
             const available = financials?.length ?? 0;
             return (
@@ -426,10 +442,10 @@ export default function StockDetail() {
                 <Row label="Dividend / Share" value={f?.dividend_per_share != null ? `$${f.dividend_per_share.toFixed(2)}` : "—"} />
               </div>
               <div className="md:col-span-2">
-                <RevenueChart data={financials} isLoading={finLoading} period={period} quarterLimit={quarterLimit} />
+                <RevenueChart data={financials} isLoading={finLoading} period={period} quarterLimit={quarterLimit} chartView={chartView} />
               </div>
-              <NetIncomeChart data={financials} isLoading={finLoading} period={period} quarterLimit={quarterLimit} />
-              <EPSChart data={financials} isLoading={finLoading} period={period} quarterLimit={quarterLimit} />
+              <NetIncomeChart data={financials} isLoading={finLoading} period={period} quarterLimit={quarterLimit} chartView={chartView} />
+              <EPSChart data={financials} isLoading={finLoading} period={period} quarterLimit={quarterLimit} chartView={chartView} />
             </div>
           );
         })()}
@@ -451,7 +467,7 @@ export default function StockDetail() {
               <Row label="Institutional Ownership" value={fmt(stock.institutional_ownership, true)} />
             </div>
             <div className="md:col-span-2">
-              <RevenueChart data={financials} isLoading={finLoading} period={period} quarterLimit={quarterLimit} />
+              <RevenueChart data={financials} isLoading={finLoading} period={period} quarterLimit={quarterLimit} chartView={chartView} />
             </div>
           </div>
         )}
@@ -463,8 +479,8 @@ export default function StockDetail() {
           const qualityOfIncome = f?.operating_cash_flow && f?.net_income ? f.operating_cash_flow / f.net_income : null;
           return (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FCFChart data={financials} isLoading={finLoading} period={period} quarterLimit={quarterLimit} />
-              <DebtChart data={financials} isLoading={finLoading} period={period} quarterLimit={quarterLimit} />
+              <FCFChart data={financials} isLoading={finLoading} period={period} quarterLimit={quarterLimit} chartView={chartView} />
+              <DebtChart data={financials} isLoading={finLoading} period={period} quarterLimit={quarterLimit} chartView={chartView} />
               <div className="card p-5">
                 <h3 className="text-sm font-semibold text-gray-300 mb-4">Latest Cash Flow</h3>
                 {f ? (
@@ -550,7 +566,7 @@ export default function StockDetail() {
                 <Row label="Payout Ratio" value={fmt(stock.payout_ratio, true)} />
               </div>
               <div className="md:col-span-2">
-                <DebtChart data={financials} isLoading={finLoading} period={period} quarterLimit={quarterLimit} />
+                <DebtChart data={financials} isLoading={finLoading} period={period} quarterLimit={quarterLimit} chartView={chartView} />
               </div>
             </div>
           );

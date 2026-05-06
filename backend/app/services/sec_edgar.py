@@ -8,6 +8,27 @@ import logging
 
 _log = logging.getLogger(__name__)
 
+# Module-level cache: ticker → normalized company name (for 13F matching)
+_TICKER_TO_NAME: dict[str, str] = {}
+
+
+async def _resolve_company_name(client: httpx.AsyncClient, ticker: str) -> str:
+    """Return normalized company name for a ticker using SEC's company tickers list."""
+    global _TICKER_TO_NAME
+    if not _TICKER_TO_NAME:
+        try:
+            r = await client.get(
+                "https://www.sec.gov/files/company_tickers.json",
+                headers=_HEADERS, timeout=15,
+            )
+            _TICKER_TO_NAME = {
+                v["ticker"].upper(): re.sub(r"[^A-Z0-9 ]", "", v["title"].upper()).strip()
+                for v in r.json().values()
+            }
+        except Exception as exc:
+            _log.debug("SEC company tickers fetch failed: %s", exc)
+    return _TICKER_TO_NAME.get(ticker.upper(), ticker.upper())
+
 _HEADERS = {"User-Agent": "ValueScreen info@valuescreen.com", "Accept-Encoding": "gzip"}
 
 TRANSACTION_CODES = {
@@ -131,6 +152,8 @@ async def get_insider_transactions(ticker: str) -> list[dict]:
 async def _check_guru_holding(client: httpx.AsyncClient, guru_cik: str, ticker: str) -> dict | None:
     """Check the latest 13F filing of a guru fund for a given ticker."""
     try:
+        company_name = await _resolve_company_name(client, ticker)
+
         r = await _get(client, f"https://data.sec.gov/submissions/CIK{guru_cik.zfill(10)}.json")
         data = r.json()
         filings = data.get("filings", {}).get("recent", {})
@@ -138,37 +161,32 @@ async def _check_guru_holding(client: httpx.AsyncClient, guru_cik: str, ticker: 
         dates = filings.get("filingDate", [])
         acc_nos = filings.get("accessionNumber", [])
 
-        # Get the most recent 13F-HR
         for i, form in enumerate(forms):
             if form in ("13F-HR", "13F-HR/A"):
                 acc = acc_nos[i].replace("-", "")
                 cik_int = str(int(guru_cik))
                 index_url = f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{acc}/{acc_nos[i]}-index.htm"
                 ri = await _get(client, index_url)
-                # Find the primary XML (infotable)
+                # Only raw infotable XML — skip XSLT-rendered and primary_doc files
                 xml_hrefs = [h for h in re.findall(r'href="(/Archives/[^"]+\.xml)"', ri.text)
-                             if "primary_doc" not in h.lower()]
+                             if "primary_doc" not in h.lower() and "xslForm13F" not in h]
                 for xhref in xml_hrefs:
                     try:
                         rx = await _get(client, "https://www.sec.gov" + xhref)
                         content = rx.text
-                        # Simple regex search — parsing full 13F XML is slow
-                        ticker_upper = ticker.upper()
-                        # Look for the ticker in the infotable XML
-                        if ticker_upper not in content.upper():
+                        content_upper = content.upper()
+                        # Search by company name (13F has issuer names, not ticker symbols)
+                        if company_name not in content_upper:
                             continue
-                        # Find shares and value for this ticker
                         pattern = (
-                            rf"<nameOfIssuer>[^<]*{re.escape(ticker_upper)}[^<]*</nameOfIssuer>"
+                            rf"<nameOfIssuer>[^<]*{re.escape(company_name)}[^<]*</nameOfIssuer>"
                             r".*?<value>(\d+)</value>.*?<sshPrnamt>(\d+)</sshPrnamt>"
                         )
                         m = re.search(pattern, content, re.IGNORECASE | re.DOTALL)
                         if m:
-                            value_thou = int(m.group(1))  # in thousands
-                            shares = int(m.group(2))
                             return {
-                                "value": value_thou * 1000,
-                                "shares": shares,
+                                "value": int(m.group(1)) * 1000,  # reported in thousands
+                                "shares": int(m.group(2)),
                                 "date_reported": dates[i],
                             }
                     except Exception:

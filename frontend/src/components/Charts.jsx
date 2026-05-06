@@ -1,7 +1,7 @@
 import {
   BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, ReferenceLine, LabelList,
+  ResponsiveContainer, ReferenceLine, LabelList, Cell,
 } from "recharts";
 
 const TT = {
@@ -71,7 +71,32 @@ function fmtVal(v) {
   return `$${Number(v).toFixed(2)}`;
 }
 
-// Custom recharts label that renders value + YoY growth % above each bar
+function fmtPct(v) {
+  if (v == null) return "";
+  return `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
+}
+
+// Converts absolute-value chartData to YoY growth % for each numeric key
+function toGrowthData(chartData, keys) {
+  return chartData.map((d, i) => {
+    const result = { year: d.year };
+    for (const k of keys) {
+      const prev = i > 0 ? chartData[i - 1][k] : null;
+      if (prev != null && prev !== 0 && d[k] != null) {
+        result[k] = +((d[k] - prev) / Math.abs(prev) * 100).toFixed(1);
+      } else {
+        result[k] = null;
+      }
+    }
+    return result;
+  });
+}
+
+function growthFill(v) {
+  return v == null ? "#3f3f41" : v >= 0 ? "#22c55e" : "#ef4444";
+}
+
+// Bar label for absolute figures: value + YoY growth %
 function makeBarLabel(chartData, dataKey, valFormatter) {
   return function BarGrowthLabel({ x, y, width, value, index }) {
     if (value == null || !width || width < 8) return null;
@@ -90,7 +115,6 @@ function makeBarLabel(chartData, dataKey, valFormatter) {
       growth != null ? `${growth >= 0 ? "+" : ""}${growth.toFixed(1)}%` : null;
 
     if (dense) {
-      // Dense: show growth % only (space is tight)
       return growthStr ? (
         <text x={cx} y={y - 3} textAnchor="middle" fontSize={fs}
           fill={growthColor} fontWeight={700}>{growthStr}</text>
@@ -110,6 +134,19 @@ function makeBarLabel(chartData, dataKey, valFormatter) {
   };
 }
 
+// Bar label for growth % mode: just shows the % value above bar
+function makeGrowthLabel() {
+  return function GrowthLabel({ x, y, width, value }) {
+    if (value == null || !width || width < 8) return null;
+    return (
+      <text x={x + width / 2} y={y - 3} textAnchor="middle" fontSize={10}
+        fill={value >= 0 ? "#4ade80" : "#ef4444"} fontWeight={700}>
+        {fmtPct(value)}
+      </text>
+    );
+  };
+}
+
 function EmptyChart({ title }) {
   return (
     <div className="card p-4">
@@ -121,19 +158,22 @@ function EmptyChart({ title }) {
   );
 }
 
-export function RevenueChart({ data, isLoading, period = "annual", quarterLimit = 20 }) {
-  const title = "Revenue & Gross Profit ($B)";
+export function RevenueChart({ data, isLoading, period = "annual", quarterLimit = 20, chartView = "figures" }) {
+  const title = chartView === "growth" ? "Revenue & Gross Profit (YoY Growth %)" : "Revenue & Gross Profit ($B)";
   if (isLoading) return <EmptyChart title={title} />;
 
-  const chartData = sliceData(data, period, quarterLimit).map((d) => ({
+  const base = sliceData(data, period, quarterLimit).map((d) => ({
     year: periodLabel(d.date, period),
     Revenue: inB(d.revenue),
     "Gross Profit": inB(d.gross_profit),
   })).filter((d) => d.year && d.Revenue != null);
 
-  if (!chartData.length) return <EmptyChart title={title} />;
+  if (!base.length) return <EmptyChart title={title} />;
 
+  const isGrowth = chartView === "growth";
+  const chartData = isGrowth ? toGrowthData(base, ["Revenue", "Gross Profit"]) : base;
   const a = adapt(chartData.length);
+
   return (
     <div className="card p-4">
       <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">{title}</h4>
@@ -142,14 +182,22 @@ export function RevenueChart({ data, isLoading, period = "annual", quarterLimit 
           <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
           <XAxis dataKey="year" tick={a.xTick} axisLine={false} tickLine={false}
             angle={a.xAngle} textAnchor={a.xAnchor} interval={a.xInterval} height={a.xHeight} />
-          <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={45} />
-          <Tooltip {...TT} formatter={(v) => [`$${v?.toFixed(2)}B`]} />
+          <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={45}
+            tickFormatter={isGrowth ? (v) => `${v}%` : undefined} />
+          <Tooltip {...TT} formatter={(v) => [isGrowth ? fmtPct(v) : `$${v?.toFixed(2)}B`]} />
           <Legend wrapperStyle={{ fontSize: 12, color: "#9ca3af", fontWeight: 600 }} />
-          <Bar dataKey="Revenue" fill="#22c55e" radius={[3, 3, 0, 0]}>
-            <LabelList content={makeBarLabel(chartData, "Revenue", fmtB)} />
+          {isGrowth && <ReferenceLine y={0} stroke="#3f3f41" />}
+          <Bar dataKey="Revenue" radius={[3, 3, 0, 0]}>
+            {isGrowth
+              ? chartData.map((d, i) => <Cell key={i} fill={growthFill(d.Revenue)} />)
+              : null}
+            <LabelList content={isGrowth ? makeGrowthLabel() : makeBarLabel(chartData, "Revenue", fmtB)} />
           </Bar>
-          <Bar dataKey="Gross Profit" fill="#10b981" radius={[3, 3, 0, 0]}>
-            <LabelList content={makeBarLabel(chartData, "Gross Profit", fmtB)} />
+          <Bar dataKey="Gross Profit" radius={[3, 3, 0, 0]}>
+            {isGrowth
+              ? chartData.map((d, i) => <Cell key={i} fill={growthFill(d["Gross Profit"])} />)
+              : null}
+            {!isGrowth && <LabelList content={makeBarLabel(chartData, "Gross Profit", fmtB)} />}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
@@ -157,18 +205,21 @@ export function RevenueChart({ data, isLoading, period = "annual", quarterLimit 
   );
 }
 
-export function EPSChart({ data, isLoading, period = "annual", quarterLimit = 20 }) {
-  const title = "EPS — Diluted ($)";
+export function EPSChart({ data, isLoading, period = "annual", quarterLimit = 20, chartView = "figures" }) {
+  const title = chartView === "growth" ? "EPS (YoY Growth %)" : "EPS — Diluted ($)";
   if (isLoading) return <EmptyChart title={title} />;
 
-  const chartData = sliceData(data, period, quarterLimit).map((d) => ({
+  const base = sliceData(data, period, quarterLimit).map((d) => ({
     year: periodLabel(d.date, period),
     EPS: d.eps_diluted ?? d.eps,
   })).filter((d) => d.year && d.EPS != null);
 
-  if (!chartData.length) return <EmptyChart title={title} />;
+  if (!base.length) return <EmptyChart title={title} />;
 
+  const isGrowth = chartView === "growth";
+  const chartData = isGrowth ? toGrowthData(base, ["EPS"]) : base;
   const a = adapt(chartData.length);
+
   return (
     <div className="card p-4">
       <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">{title}</h4>
@@ -177,11 +228,15 @@ export function EPSChart({ data, isLoading, period = "annual", quarterLimit = 20
           <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
           <XAxis dataKey="year" tick={a.xTick} axisLine={false} tickLine={false}
             angle={a.xAngle} textAnchor={a.xAnchor} interval={a.xInterval} height={a.xHeight} />
-          <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={45} />
-          <Tooltip {...TT} formatter={(v) => [`$${v?.toFixed(2)}`]} />
+          <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={45}
+            tickFormatter={isGrowth ? (v) => `${v}%` : undefined} />
+          <Tooltip {...TT} formatter={(v) => [isGrowth ? fmtPct(v) : `$${v?.toFixed(2)}`]} />
           <ReferenceLine y={0} stroke="#3f3f41" />
-          <Bar dataKey="EPS" fill="#22c55e" radius={[3, 3, 0, 0]}>
-            <LabelList content={makeBarLabel(chartData, "EPS", fmtVal)} />
+          <Bar dataKey="EPS" radius={[3, 3, 0, 0]}>
+            {isGrowth
+              ? chartData.map((d, i) => <Cell key={i} fill={growthFill(d.EPS)} />)
+              : null}
+            <LabelList content={isGrowth ? makeGrowthLabel() : makeBarLabel(chartData, "EPS", fmtVal)} />
           </Bar>
         </BarChart>
       </ResponsiveContainer>
@@ -189,18 +244,21 @@ export function EPSChart({ data, isLoading, period = "annual", quarterLimit = 20
   );
 }
 
-export function NetIncomeChart({ data, isLoading, period = "annual", quarterLimit = 20 }) {
-  const title = "Net Income ($B)";
+export function NetIncomeChart({ data, isLoading, period = "annual", quarterLimit = 20, chartView = "figures" }) {
+  const title = chartView === "growth" ? "Net Income (YoY Growth %)" : "Net Income ($B)";
   if (isLoading) return <EmptyChart title={title} />;
 
-  const chartData = sliceData(data, period, quarterLimit).map((d) => ({
+  const base = sliceData(data, period, quarterLimit).map((d) => ({
     year: periodLabel(d.date, period),
     "Net Income": inB(d.net_income),
   })).filter((d) => d.year && d["Net Income"] != null);
 
-  if (!chartData.length) return <EmptyChart title={title} />;
+  if (!base.length) return <EmptyChart title={title} />;
 
+  const isGrowth = chartView === "growth";
+  const chartData = isGrowth ? toGrowthData(base, ["Net Income"]) : base;
   const a = adapt(chartData.length);
+
   return (
     <div className="card p-4">
       <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">{title}</h4>
@@ -209,11 +267,15 @@ export function NetIncomeChart({ data, isLoading, period = "annual", quarterLimi
           <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
           <XAxis dataKey="year" tick={a.xTick} axisLine={false} tickLine={false}
             angle={a.xAngle} textAnchor={a.xAnchor} interval={a.xInterval} height={a.xHeight} />
-          <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={45} />
-          <Tooltip {...TT} formatter={(v) => [`$${v?.toFixed(2)}B`]} />
+          <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={45}
+            tickFormatter={isGrowth ? (v) => `${v}%` : undefined} />
+          <Tooltip {...TT} formatter={(v) => [isGrowth ? fmtPct(v) : `$${v?.toFixed(2)}B`]} />
           <ReferenceLine y={0} stroke="#3f3f41" />
-          <Bar dataKey="Net Income" fill="#f59e0b" radius={[3, 3, 0, 0]}>
-            <LabelList content={makeBarLabel(chartData, "Net Income", fmtB)} />
+          <Bar dataKey="Net Income" radius={[3, 3, 0, 0]}>
+            {isGrowth
+              ? chartData.map((d, i) => <Cell key={i} fill={growthFill(d["Net Income"])} />)
+              : null}
+            <LabelList content={isGrowth ? makeGrowthLabel() : makeBarLabel(chartData, "Net Income", fmtB)} />
           </Bar>
         </BarChart>
       </ResponsiveContainer>
@@ -221,19 +283,22 @@ export function NetIncomeChart({ data, isLoading, period = "annual", quarterLimi
   );
 }
 
-export function FCFChart({ data, isLoading, period = "annual", quarterLimit = 20 }) {
-  const title = "Free Cash Flow ($B)";
+export function FCFChart({ data, isLoading, period = "annual", quarterLimit = 20, chartView = "figures" }) {
+  const title = chartView === "growth" ? "Free Cash Flow (YoY Growth %)" : "Free Cash Flow ($B)";
   if (isLoading) return <EmptyChart title={title} />;
 
-  const chartData = sliceData(data, period, quarterLimit).map((d) => ({
+  const base = sliceData(data, period, quarterLimit).map((d) => ({
     year: periodLabel(d.date, period),
     "Op. Cash Flow": inB(d.operating_cash_flow),
     "Free Cash Flow": inB(d.fcf),
-  })).filter((d) => d.year && d["Free Cash Flow"] != null);
+  })).filter((d) => d.year && d["Op. Cash Flow"] != null);
 
-  if (!chartData.length) return <EmptyChart title={title} />;
+  if (!base.length) return <EmptyChart title={title} />;
 
+  const isGrowth = chartView === "growth";
+  const chartData = isGrowth ? toGrowthData(base, ["Op. Cash Flow", "Free Cash Flow"]) : base;
   const a = adapt(chartData.length);
+
   return (
     <div className="card p-4">
       <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">{title}</h4>
@@ -242,15 +307,22 @@ export function FCFChart({ data, isLoading, period = "annual", quarterLimit = 20
           <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
           <XAxis dataKey="year" tick={a.xTick} axisLine={false} tickLine={false}
             angle={a.xAngle} textAnchor={a.xAnchor} interval={a.xInterval} height={a.xHeight} />
-          <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={45} />
-          <Tooltip {...TT} formatter={(v) => [`$${v?.toFixed(2)}B`]} />
+          <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={45}
+            tickFormatter={isGrowth ? (v) => `${v}%` : undefined} />
+          <Tooltip {...TT} formatter={(v) => [isGrowth ? fmtPct(v) : `$${v?.toFixed(2)}B`]} />
           <Legend wrapperStyle={{ fontSize: 12, color: "#9ca3af", fontWeight: 600 }} />
           <ReferenceLine y={0} stroke="#3f3f41" />
-          <Bar dataKey="Op. Cash Flow" fill="#10b981" radius={[3, 3, 0, 0]}>
-            <LabelList content={makeBarLabel(chartData, "Op. Cash Flow", fmtB)} />
+          <Bar dataKey="Op. Cash Flow" fill={isGrowth ? undefined : "#10b981"} radius={[3, 3, 0, 0]}>
+            {isGrowth
+              ? chartData.map((d, i) => <Cell key={i} fill={growthFill(d["Op. Cash Flow"])} />)
+              : null}
+            <LabelList content={isGrowth ? makeGrowthLabel() : makeBarLabel(chartData, "Op. Cash Flow", fmtB)} />
           </Bar>
-          <Bar dataKey="Free Cash Flow" fill="#22c55e" radius={[3, 3, 0, 0]}>
-            <LabelList content={makeBarLabel(chartData, "Free Cash Flow", fmtB)} />
+          <Bar dataKey="Free Cash Flow" fill={isGrowth ? undefined : "#22c55e"} radius={[3, 3, 0, 0]}>
+            {isGrowth
+              ? chartData.map((d, i) => <Cell key={i} fill={growthFill(d["Free Cash Flow"])} />)
+              : null}
+            {!isGrowth && <LabelList content={makeBarLabel(chartData, "Free Cash Flow", fmtB)} />}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
@@ -258,53 +330,79 @@ export function FCFChart({ data, isLoading, period = "annual", quarterLimit = 20
   );
 }
 
-export function DebtChart({ data, isLoading, period = "annual", quarterLimit = 20 }) {
-  const title = "Debt vs Cash ($B)";
+export function DebtChart({ data, isLoading, period = "annual", quarterLimit = 20, chartView = "figures" }) {
+  const title = chartView === "growth" ? "Debt vs Cash (YoY Growth %)" : "Debt vs Cash ($B)";
   if (isLoading) return <EmptyChart title={title} />;
 
-  const chartData = sliceData(data, period, quarterLimit).map((d) => ({
+  const base = sliceData(data, period, quarterLimit).map((d) => ({
     year: periodLabel(d.date, period),
     "Total Debt": inB(d.total_debt),
     Cash: inB(d.cash),
     "Net Debt": inB(d.net_debt),
   })).filter((d) => d.year && d["Total Debt"] != null);
 
-  if (!chartData.length) return <EmptyChart title={title} />;
+  if (!base.length) return <EmptyChart title={title} />;
 
+  const isGrowth = chartView === "growth";
+  const chartData = isGrowth ? toGrowthData(base, ["Total Debt", "Cash", "Net Debt"]) : base;
   const a = adapt(chartData.length);
+
   return (
     <div className="card p-4">
       <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">{title}</h4>
       <ResponsiveContainer width="100%" height={a.height}>
-        <LineChart data={chartData} margin={a.margin}>
-          <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
-          <XAxis dataKey="year" tick={a.xTick} axisLine={false} tickLine={false}
-            angle={a.xAngle} textAnchor={a.xAnchor} interval={a.xInterval} height={a.xHeight} />
-          <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={45} />
-          <Tooltip {...TT} formatter={(v) => [`$${v?.toFixed(2)}B`]} />
-          <Legend wrapperStyle={{ fontSize: 12, color: "#9ca3af", fontWeight: 600 }} />
-          <Line type="monotone" dataKey="Total Debt" stroke="#ef4444" strokeWidth={2}
-            dot={{ r: a.dotR }} activeDot={{ r: 5 }}>
-            {!a.dense && (
-              <LabelList dataKey="Total Debt" position="top" formatter={fmtB}
-                style={{ fontSize: 10, fill: "#ef4444", fontWeight: 700 }} />
-            )}
-          </Line>
-          <Line type="monotone" dataKey="Cash" stroke="#22c55e" strokeWidth={2}
-            dot={{ r: a.dotR }} activeDot={{ r: 5 }}>
-            {!a.dense && (
-              <LabelList dataKey="Cash" position="top" formatter={fmtB}
-                style={{ fontSize: 10, fill: "#22c55e", fontWeight: 700 }} />
-            )}
-          </Line>
-          <Line type="monotone" dataKey="Net Debt" stroke="#f59e0b" strokeWidth={1.5}
-            strokeDasharray="4 2" dot={{ r: a.dotR }} activeDot={{ r: 5 }}>
-            {!a.dense && (
-              <LabelList dataKey="Net Debt" position="top" formatter={fmtB}
-                style={{ fontSize: 10, fill: "#f59e0b", fontWeight: 700 }} />
-            )}
-          </Line>
-        </LineChart>
+        {isGrowth ? (
+          <BarChart data={chartData} margin={a.margin} barCategoryGap="20%">
+            <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
+            <XAxis dataKey="year" tick={a.xTick} axisLine={false} tickLine={false}
+              angle={a.xAngle} textAnchor={a.xAnchor} interval={a.xInterval} height={a.xHeight} />
+            <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={45}
+              tickFormatter={(v) => `${v}%`} />
+            <Tooltip {...TT} formatter={(v) => [fmtPct(v)]} />
+            <Legend wrapperStyle={{ fontSize: 12, color: "#9ca3af", fontWeight: 600 }} />
+            <ReferenceLine y={0} stroke="#3f3f41" />
+            <Bar dataKey="Total Debt" radius={[3, 3, 0, 0]}>
+              {chartData.map((d, i) => <Cell key={i} fill={growthFill(d["Total Debt"])} />)}
+              <LabelList content={makeGrowthLabel()} />
+            </Bar>
+            <Bar dataKey="Cash" radius={[3, 3, 0, 0]}>
+              {chartData.map((d, i) => <Cell key={i} fill={growthFill(d.Cash)} />)}
+            </Bar>
+            <Bar dataKey="Net Debt" radius={[3, 3, 0, 0]}>
+              {chartData.map((d, i) => <Cell key={i} fill={growthFill(d["Net Debt"])} />)}
+            </Bar>
+          </BarChart>
+        ) : (
+          <LineChart data={chartData} margin={a.margin}>
+            <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
+            <XAxis dataKey="year" tick={a.xTick} axisLine={false} tickLine={false}
+              angle={a.xAngle} textAnchor={a.xAnchor} interval={a.xInterval} height={a.xHeight} />
+            <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={45} />
+            <Tooltip {...TT} formatter={(v) => [`$${v?.toFixed(2)}B`]} />
+            <Legend wrapperStyle={{ fontSize: 12, color: "#9ca3af", fontWeight: 600 }} />
+            <Line type="monotone" dataKey="Total Debt" stroke="#ef4444" strokeWidth={2}
+              dot={{ r: a.dotR }} activeDot={{ r: 5 }}>
+              {!a.dense && (
+                <LabelList dataKey="Total Debt" position="top" formatter={fmtB}
+                  style={{ fontSize: 10, fill: "#ef4444", fontWeight: 700 }} />
+              )}
+            </Line>
+            <Line type="monotone" dataKey="Cash" stroke="#22c55e" strokeWidth={2}
+              dot={{ r: a.dotR }} activeDot={{ r: 5 }}>
+              {!a.dense && (
+                <LabelList dataKey="Cash" position="top" formatter={fmtB}
+                  style={{ fontSize: 10, fill: "#22c55e", fontWeight: 700 }} />
+              )}
+            </Line>
+            <Line type="monotone" dataKey="Net Debt" stroke="#f59e0b" strokeWidth={1.5}
+              strokeDasharray="4 2" dot={{ r: a.dotR }} activeDot={{ r: 5 }}>
+              {!a.dense && (
+                <LabelList dataKey="Net Debt" position="top" formatter={fmtB}
+                  style={{ fontSize: 10, fill: "#f59e0b", fontWeight: 700 }} />
+              )}
+            </Line>
+          </LineChart>
+        )}
       </ResponsiveContainer>
     </div>
   );
