@@ -406,3 +406,93 @@ def _map_growth(info: dict) -> dict:
         "epsgrowth": info.get("earningsGrowth"),
         "freeCashFlowGrowth": None,
     }
+
+
+GURU_MAP = {
+    "Berkshire Hathaway": "Warren Buffett",
+    "Pershing Square": "Bill Ackman",
+    "Baupost": "Seth Klarman",
+    "Third Point": "Dan Loeb",
+    "Greenlight": "David Einhorn",
+    "Fairfax": "Prem Watsa",
+    "Appaloosa": "David Tepper",
+    "Gotham Asset": "Joel Greenblatt",
+    "Sequoia Fund": "Sequoia Fund",
+    "Longleaf": "Mason Hawkins",
+    "Southeastern Asset": "Mason Hawkins",
+    "Tweedy Browne": "Tweedy Browne",
+    "Ariel Investments": "John Rogers",
+    "First Eagle": "First Eagle",
+    "Gabelli": "Mario Gabelli",
+    "Markel": "Tom Gayner",
+    "Parnassus": "Parnassus",
+    "Diamond Hill": "Diamond Hill",
+    "Oakmark": "Bill Nygren",
+    "Dodge & Cox": "Dodge & Cox",
+    "Weitz": "Wally Weitz",
+    "Royce": "Chuck Royce",
+    "Yacktman": "Donald Yacktman",
+    "Pzena": "Richard Pzena",
+    "Brandes": "Charles Brandes",
+    "Smead": "Bill Smead",
+    "FPA": "Steven Romick",
+}
+
+
+def _safe(val):
+    try:
+        import math
+        return None if val is None or (isinstance(val, float) and math.isnan(val)) else val
+    except Exception:
+        return None
+
+
+def _fetch_insiders_sync(symbol: str) -> dict:
+    t = yf.Ticker(symbol)
+    transactions = []
+    gurus = []
+
+    try:
+        df = t.insider_transactions
+        if df is not None and not df.empty:
+            df = df.head(25)
+            for _, row in df.iterrows():
+                transactions.append({
+                    "name": _safe(row.get("Insider") or row.get("filerName")),
+                    "position": _safe(row.get("Position") or row.get("filerRelation")),
+                    "transaction_type": _safe(row.get("Transaction") or row.get("transactionType")),
+                    "shares": _safe(row.get("Shares") or row.get("shares")),
+                    "value": _safe(row.get("Value") or row.get("value")),
+                    "date": str(row.get("Date") or row.get("startDate") or "")[:10] or None,
+                })
+    except Exception:
+        pass
+
+    try:
+        df = t.institutional_holders
+        if df is not None and not df.empty:
+            for _, row in df.iterrows():
+                holder = str(row.get("Holder") or row.get("holder") or "")
+                for key, guru_name in GURU_MAP.items():
+                    if key.lower() in holder.lower():
+                        shares = _safe(row.get("Shares") or row.get("shares"))
+                        value = _safe(row.get("Value") or row.get("value"))
+                        pct = _safe(row.get("% Out") or row.get("pctHeld"))
+                        date_rep = row.get("Date Reported") or row.get("reportDate")
+                        gurus.append({
+                            "holder": holder,
+                            "guru": guru_name,
+                            "shares": int(shares) if shares is not None else None,
+                            "value": float(value) if value is not None else None,
+                            "pct_out": float(pct) if pct is not None else None,
+                            "date_reported": str(date_rep)[:10] if date_rep else None,
+                        })
+                        break
+    except Exception:
+        pass
+
+    return {"transactions": transactions, "gurus": gurus}
+
+
+async def get_insiders(ticker: str) -> dict:
+    return await _run_sync(_fetch_insiders_sync, ticker.upper())

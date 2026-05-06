@@ -567,8 +567,85 @@ export default function StockDetail() {
 
         {/* INSIDERS */}
         {tab === "Insiders" && (
-          <div className="card p-6 text-center text-muted text-sm">
-            Insider transaction data requires a paid FMP plan.
+          <div className="space-y-4">
+            {/* Guru Holdings */}
+            <div className="card p-5">
+              <h3 className="text-sm font-semibold text-gray-300 mb-3">Top Guru Holdings</h3>
+              {insiders?.gurus?.length > 0 ? (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-muted uppercase tracking-wider border-b border-bg-border">
+                      <th className="text-left pb-2">Guru</th>
+                      <th className="text-left pb-2 text-muted">Fund</th>
+                      <th className="text-right pb-2">Shares</th>
+                      <th className="text-right pb-2">Value</th>
+                      <th className="text-right pb-2">% Out</th>
+                      <th className="text-right pb-2">Reported</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {insiders.gurus.map((g, i) => (
+                      <tr key={i} className="border-b border-bg-border/50 hover:bg-bg-hover transition-colors">
+                        <td className="py-2.5 font-semibold text-accent-blue">{g.guru}</td>
+                        <td className="py-2.5 text-muted text-xs">{g.holder}</td>
+                        <td className="py-2.5 text-right font-mono text-xs">{g.shares != null ? g.shares.toLocaleString() : "—"}</td>
+                        <td className="py-2.5 text-right font-mono text-xs">{g.value != null ? `$${(g.value / 1e6).toFixed(1)}M` : "—"}</td>
+                        <td className="py-2.5 text-right font-mono text-xs">{g.pct_out != null ? `${(g.pct_out * 100).toFixed(2)}%` : "—"}</td>
+                        <td className="py-2.5 text-right text-muted text-xs">{g.date_reported ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="text-muted text-sm">No major guru holdings found for this stock.</p>
+              )}
+            </div>
+
+            {/* Insider Transactions */}
+            <div className="card p-5">
+              <h3 className="text-sm font-semibold text-gray-300 mb-3">Insider Transactions</h3>
+              {insiders?.transactions?.length > 0 ? (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-muted uppercase tracking-wider border-b border-bg-border">
+                      <th className="text-left pb-2">Insider</th>
+                      <th className="text-left pb-2">Position</th>
+                      <th className="text-left pb-2">Type</th>
+                      <th className="text-right pb-2">Shares</th>
+                      <th className="text-right pb-2">Value</th>
+                      <th className="text-right pb-2">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {insiders.transactions.map((t, i) => {
+                      const isBuy = t.transaction_type?.toLowerCase().includes("buy") ||
+                                    t.transaction_type?.toLowerCase().includes("purchase") ||
+                                    t.transaction_type?.toLowerCase().includes("acquisition");
+                      return (
+                        <tr key={i} className="border-b border-bg-border/50 hover:bg-bg-hover transition-colors">
+                          <td className="py-2.5 font-medium text-gray-200">{t.name ?? "—"}</td>
+                          <td className="py-2.5 text-muted text-xs">{t.position ?? "—"}</td>
+                          <td className="py-2.5">
+                            <span className={clsx(
+                              "text-xs px-2 py-0.5 rounded font-semibold",
+                              isBuy ? "bg-green-bg text-green border border-green/20"
+                                     : "bg-red-bg text-red border border-red/20"
+                            )}>
+                              {t.transaction_type ?? "—"}
+                            </span>
+                          </td>
+                          <td className="py-2.5 text-right font-mono text-xs">{t.shares != null ? Number(t.shares).toLocaleString() : "—"}</td>
+                          <td className="py-2.5 text-right font-mono text-xs">{t.value != null ? `$${(t.value / 1e6).toFixed(2)}M` : "—"}</td>
+                          <td className="py-2.5 text-right text-muted text-xs">{t.date ?? "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="text-muted text-sm">No recent insider transactions found.</p>
+              )}
+            </div>
           </div>
         )}
 

@@ -163,14 +163,23 @@ class DCFResponse(BaseModel):
 
 
 class InsiderRecord(BaseModel):
-    ticker: str
     name: Optional[str] = None
     position: Optional[str] = None
     transaction_type: Optional[str] = None
     shares: Optional[float] = None
-    price: Optional[float] = None
     value: Optional[float] = None
-    date: Optional[date_type] = None
-    filing_date: Optional[date_type] = None
+    date: Optional[str] = None
 
-    model_config = {"from_attributes": True}
+
+class GuruHolder(BaseModel):
+    holder: str
+    guru: Optional[str] = None
+    shares: Optional[int] = None
+    value: Optional[float] = None
+    pct_out: Optional[float] = None
+    date_reported: Optional[str] = None
+
+
+class InsidersResponse(BaseModel):
+    transactions: list[InsiderRecord] = []
+    gurus: list[GuruHolder] = []
