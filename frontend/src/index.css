@@ -33,14 +33,14 @@
   }
 
   .tab-btn {
-    @apply px-4 py-2 text-sm font-medium rounded-lg transition-colors;
+    @apply px-4 py-2 text-sm font-medium transition-colors;
   }
 
   .tab-btn-active {
-    @apply bg-accent-blue/20 text-accent-blue;
+    @apply text-white border-b-2 border-accent-blue;
   }
 
   .tab-btn-inactive {
-    @apply text-muted hover:text-gray-300 hover:bg-bg-hover;
+    @apply text-muted hover:text-gray-200 hover:bg-bg-hover border-b-2 border-transparent;
   }
 }

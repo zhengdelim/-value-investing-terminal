@@ -2,6 +2,7 @@
 import asyncio
 import functools
 from typing import Any, Optional
+from urllib.parse import urlparse
 import pandas as pd
 import yfinance as yf
 
@@ -339,6 +340,9 @@ async def get_cash_flow(ticker: str, limit: int = 5, period: str = "annual") -> 
 # --- Field mapping helpers ---
 
 def _map_profile(info: dict) -> dict:
+    website = info.get("website") or ""
+    domain = urlparse(website).netloc if website else None
+    image = f"https://logo.clearbit.com/{domain}" if domain else None
     return {
         "companyName": info.get("longName") or info.get("shortName", ""),
         "sector": info.get("sector"),
@@ -351,7 +355,7 @@ def _map_profile(info: dict) -> dict:
         "employees": info.get("fullTimeEmployees"),
         "currency": info.get("currency", "USD"),
         "website": info.get("website"),
-        "image": None,
+        "image": image,
         "price": info.get("currentPrice") or info.get("regularMarketPrice"),
         "marketCap": info.get("marketCap"),
         "beta": info.get("beta"),

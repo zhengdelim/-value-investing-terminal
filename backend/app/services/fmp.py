@@ -184,6 +184,25 @@ async def get_geographic_segments(ticker: str) -> list:
         return []
 
 
+async def search(query: str, limit: int = 10) -> list[dict]:
+    try:
+        data = await _get("/search", query=query, limit=limit)
+        if isinstance(data, list):
+            return [
+                {
+                    "symbol": d.get("symbol", ""),
+                    "name": d.get("name") or d.get("companyName") or d.get("symbol", ""),
+                    "exchange": d.get("exchangeShortName") or d.get("exchange") or "",
+                    "sector": "",
+                    "in_db": False,
+                }
+                for d in data if d.get("symbol")
+            ]
+    except Exception as exc:
+        _log.warning("FMP search failed for %r: %s", query, exc)
+    return []
+
+
 async def get_dcf(ticker: str) -> dict:
     try:
         data = await _get("/discounted-cash-flow", symbol=ticker.upper())

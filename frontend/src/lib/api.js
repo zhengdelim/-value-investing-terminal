@@ -48,4 +48,7 @@ export const fetchSp500Tickers  = ()            => api.get("/sp500/tickers").the
 export const startSp500Seed     = ()            => api.post("/sp500/seed").then((r) => r.data);
 export const fetchSeedProgress  = ()            => api.get("/sp500/progress").then((r) => r.data);
 
+// Rescore all stocks from existing DB data (no FMP quota used)
+export const rescoreAllStocks   = ()            => api.post("/stocks/rescore").then((r) => r.data);
+
 export default api;

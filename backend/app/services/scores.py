@@ -232,7 +232,7 @@ def swot_moat_analysis(stock: dict) -> dict:
     # --- Moat Analysis ---
     moat_score = 0
     moat_signals = []
-    name = stock.get("name") or ticker
+    name = stock.get("name") or stock.get("ticker") or "the company"
 
     if gm > 0.60:
         moat_score += 25

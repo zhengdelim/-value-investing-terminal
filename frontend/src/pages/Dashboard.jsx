@@ -10,7 +10,7 @@ import IndexTicker from "../components/IndexTicker";
 import SeedSP500Modal from "../components/SeedSP500Modal";
 import { useStocks } from "../hooks/useStocks";
 import { useWatchlist } from "../hooks/useWatchlist";
-import { fetchSearch, fetchWatchlistStocks } from "../lib/api";
+import { fetchSearch, fetchWatchlistStocks, rescoreAllStocks } from "../lib/api";
 
 const DEFAULT_FILTERS = {
   pe_max: "", pb_max: "", pfcf_max: "", ev_ebitda_max: "",
@@ -34,6 +34,9 @@ export default function Dashboard() {
   const [showSuggestions, setShowSugg]  = useState(false);
   const [selectedIdx, setSelectedIdx]   = useState(-1);
   const [showSeedModal, setShowSeed]    = useState(false);
+  const [rescoring, setRescoring]       = useState(false);
+  const [rescoreMsg, setRescoreMsg]     = useState(null);
+  const rescoreTimer                    = useRef(null);
   const searchRef = useRef(null);
   const navigate  = useNavigate();
 
@@ -76,6 +79,22 @@ export default function Dashboard() {
     };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  useEffect(() => () => clearTimeout(rescoreTimer.current), []);
+
+  const handleRescore = useCallback(async () => {
+    setRescoring(true);
+    setRescoreMsg(null);
+    try {
+      const result = await rescoreAllStocks();
+      setRescoreMsg(`${result.updated} stocks rescored`);
+    } catch {
+      setRescoreMsg("Rescore failed");
+    } finally {
+      setRescoring(false);
+      rescoreTimer.current = setTimeout(() => setRescoreMsg(null), 4000);
+    }
   }, []);
 
   const handleChange = useCallback((field, value) =>
@@ -194,6 +213,22 @@ export default function Dashboard() {
             {activeTab === "screener" && (
               <>
                 <span className="text-xs text-muted font-mono">{displayed.length} results</span>
+                <button
+                  onClick={handleRescore}
+                  disabled={rescoring}
+                  title="Recompute GuruScores from DB data — no API quota used"
+                  className={clsx(
+                    "text-xs px-3 py-1.5 rounded border transition-colors whitespace-nowrap flex items-center gap-1.5",
+                    rescoring
+                      ? "border-bg-border text-muted cursor-not-allowed"
+                      : rescoreMsg
+                      ? "border-green/40 text-green"
+                      : "border-yellow/30 text-yellow hover:bg-yellow/10"
+                  )}>
+                  {rescoring
+                    ? <><span className="w-3 h-3 border border-yellow border-t-transparent rounded-full animate-spin" />Rescoring…</>
+                    : rescoreMsg ?? "↻ Rescore All"}
+                </button>
                 <button onClick={() => setShowSeed(true)}
                   className="text-xs px-3 py-1.5 rounded border border-accent-blue/30 text-accent-blue hover:bg-accent-blue/10 transition-colors whitespace-nowrap">
                   + S&P 500

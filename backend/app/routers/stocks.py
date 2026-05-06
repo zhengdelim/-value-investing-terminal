@@ -1,5 +1,7 @@
 import asyncio
 import functools
+import logging
+from collections import defaultdict
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
@@ -15,6 +17,80 @@ from ..services import scores as score_svc
 from .financials import _build_record
 
 router = APIRouter()
+_log = logging.getLogger(__name__)
+
+
+def _yoy(cur, prev):
+    """Year-over-year growth rate; returns None when inputs are missing or prev is zero."""
+    if cur is not None and prev and prev != 0:
+        return (cur - prev) / abs(prev)
+    return None
+
+
+def _derive_missing_metrics(
+    *,
+    revenue=None, gross_profit=None, op_income=None, net_income=None, ebitda=None,
+    equity=None, assets=None, debt=None, ca=None, cl=None, inv=0.0, ltd=None,
+    cash=0.0, fcf=None, int_exp=None,
+    price=None, mktcap=None, shares=None, eps=None,
+    rev_prev=None, eps_prev=None, fcf_prev=None,
+) -> dict:
+    """Compute financial metrics from raw float values.
+    Returns a dict containing only keys where the result is computable.
+    Used as a fallback when FMP /ratios or /key-metrics are unavailable.
+    """
+    out = {}
+    inv = inv or 0.0
+    cash = cash or 0.0
+
+    if gross_profit and revenue and revenue > 0:
+        out["gross_margin"] = gross_profit / revenue
+    if op_income and revenue and revenue > 0:
+        out["operating_margin"] = op_income / revenue
+    if net_income is not None and revenue and revenue > 0:
+        out["profit_margin"] = net_income / revenue
+    if net_income is not None and equity and equity > 0:
+        out["roe"] = net_income / equity
+    if net_income is not None and assets and assets > 0:
+        out["roa"] = net_income / assets
+    if net_income is not None and equity and ltd is not None:
+        invested = (equity or 0) + (ltd or 0)
+        if invested > 0:
+            out["roic"] = net_income / invested
+    if debt is not None and equity and equity > 0:
+        out["de_ratio"] = debt / abs(equity)
+    if ca and cl and cl > 0:
+        out["current_ratio"] = ca / cl
+    if ca is not None and cl and cl > 0:
+        out["quick_ratio"] = (ca - inv) / cl
+    if op_income and int_exp and int_exp != 0:
+        out["interest_coverage"] = op_income / abs(int_exp)
+
+    if price and shares and shares > 0:
+        _eps = net_income / shares if net_income is not None else eps
+        bvps = equity / shares if equity else None
+        fcf_ps = fcf / shares if fcf is not None else None
+        if _eps and _eps > 0:
+            out["pe_ratio"] = price / _eps
+        if bvps and bvps > 0:
+            out["pb_ratio"] = price / bvps
+        if revenue and revenue > 0:
+            out["ps_ratio"] = (price * shares) / revenue
+        if fcf_ps and fcf_ps > 0:
+            out["pfcf_ratio"] = price / fcf_ps
+
+    if mktcap and ebitda and ebitda > 0:
+        ev = mktcap + (debt or 0) - cash
+        out["ev_ebitda"] = ev / ebitda
+
+    if (g := _yoy(revenue, rev_prev)) is not None:
+        out["revenue_growth"] = g
+    if (g := _yoy(eps, eps_prev)) is not None:
+        out["eps_growth"] = g
+    if (g := _yoy(fcf, fcf_prev)) is not None:
+        out["fcf_growth"] = g
+
+    return out
 
 # Curated list for seeding — fetched on demand via POST /api/stocks/seed
 SEED_TICKERS = [
@@ -28,15 +104,20 @@ SEED_TICKERS = [
 async def _refresh_stock(ticker: str, db: Session) -> Stock:
     t = ticker.upper()
 
-    profile, ratios, growth, metrics, income, balance, cashflow = (
-        await fmp.get_profile(t),
-        await fmp.get_ratios(t, limit=5),
-        await fmp.get_financial_growth(t, limit=1),
-        await fmp.get_key_metrics(t, limit=1),
-        await fmp.get_income_statement(t, limit=5),
-        await fmp.get_balance_sheet(t, limit=5),
-        await fmp.get_cash_flow(t, limit=5),
+    # Fetch all primary data in parallel; use limit=10 for ratios so multiples-history can reuse them
+    profile, ratios, growth, metrics, income, balance, cashflow = await asyncio.gather(
+        fmp.get_profile(t),
+        fmp.get_ratios(t, limit=10),
+        fmp.get_financial_growth(t, limit=1),
+        fmp.get_key_metrics(t, limit=1),
+        fmp.get_income_statement(t, limit=5),
+        fmp.get_balance_sheet(t, limit=5),
+        fmp.get_cash_flow(t, limit=5),
     )
+
+    # Cache raw ratios so the multiples-history endpoint can reuse them without an extra FMP call
+    if ratios:
+        cache.cache_set(cache.make_key("ratios_raw", ticker=t), ratios, ttl=86400)
 
     if not profile:
         raise HTTPException(status_code=404, detail=f"Ticker {t} not found on FMP.")
@@ -75,10 +156,59 @@ async def _refresh_stock(ticker: str, db: Session) -> Stock:
     mktcap_v = sf(profile.get("marketCap"))
 
     rev_growth = sf(g.get("revenueGrowth"))
-    eps_growth = sf(g.get("epsgrowth"))
+    eps_growth = sf(g.get("epsGrowth") or g.get("epsgrowth") or g.get("epsDilutedGrowth"))
     fcf_growth = sf(g.get("freeCashFlowGrowth"))
 
     shares = sf(inc.get("weightedAverageShsOutDil") or inc.get("weightedAverageShsOut"))
+
+    # Match cashflow rows by date to avoid index misalignment between independent API lists
+    cf_by_date = {r.get("date"): r for r in cashflow}
+    cf_prev = cf_by_date.get(inc_prev.get("date"), {}) if inc_prev else {}
+
+    fb = _derive_missing_metrics(
+        revenue=sf(inc.get("revenue")),
+        gross_profit=sf(inc.get("grossProfit")),
+        op_income=sf(inc.get("operatingIncome")),
+        net_income=sf(inc.get("netIncome")),
+        ebitda=sf(inc.get("ebitda")),
+        equity=sf(bal.get("totalStockholdersEquity") or bal.get("totalEquity")),
+        assets=sf(bal.get("totalAssets")),
+        debt=sf(bal.get("totalDebt")),
+        ca=sf(bal.get("totalCurrentAssets")),
+        cl=sf(bal.get("totalCurrentLiabilities")),
+        inv=sf(bal.get("inventory")) or 0,
+        ltd=sf(bal.get("longTermDebt")),
+        cash=sf(bal.get("cashAndCashEquivalents")) or 0,
+        fcf=sf(cf.get("freeCashFlow")),
+        int_exp=sf(inc.get("interestExpense")),
+        price=sf(profile.get("price")),
+        mktcap=mktcap_v,
+        shares=shares,
+        eps=sf(inc.get("eps") or inc.get("epsDiluted")),
+        rev_prev=sf(inc_prev.get("revenue")) if inc_prev else None,
+        eps_prev=sf(inc_prev.get("eps") or inc_prev.get("epsDiluted")) if inc_prev else None,
+        fcf_prev=sf(cf_prev.get("freeCashFlow")),
+    )
+
+    # Apply fallback values only where primary sources returned None
+    if gm_v is None:        gm_v        = fb.get("gross_margin")
+    if om_v is None:        om_v        = fb.get("operating_margin")
+    if pm_v is None:        pm_v        = fb.get("profit_margin")
+    if roe_v is None:       roe_v       = fb.get("roe")
+    if roa_v is None:       roa_v       = fb.get("roa")
+    if roic_v is None:      roic_v      = fb.get("roic")
+    if de_v is None:        de_v        = fb.get("de_ratio")
+    if cr_v is None:        cr_v        = fb.get("current_ratio")
+    if qr_v is None:        qr_v        = fb.get("quick_ratio")
+    if ic_v is None:        ic_v        = fb.get("interest_coverage")
+    if pe_v is None:        pe_v        = fb.get("pe_ratio")
+    if pb_v is None:        pb_v        = fb.get("pb_ratio")
+    if ps_v is None:        ps_v        = fb.get("ps_ratio")
+    if pfcf_v is None:      pfcf_v      = fb.get("pfcf_ratio")
+    if ev_ebitda_v is None: ev_ebitda_v = fb.get("ev_ebitda")
+    if rev_growth is None:  rev_growth  = fb.get("revenue_growth")
+    if eps_growth is None:  eps_growth  = fb.get("eps_growth")
+    if fcf_growth is None:  fcf_growth  = fb.get("fcf_growth")
 
     # Piotroski
     pio = score_svc.piotroski_f_score(
@@ -178,7 +308,6 @@ async def _refresh_stock(ticker: str, db: Session) -> Stock:
     db.refresh(stock)
 
     # Populate Financial table so charts and DCF work without a separate API call
-    _log = __import__("logging").getLogger(__name__)
 
     def _seed_financials(period_label, inc_rows, bal_rows, cf_rows):
         bal_by_date = {r.get("date"): r for r in bal_rows}
@@ -199,9 +328,11 @@ async def _refresh_stock(ticker: str, db: Session) -> Stock:
         _log.warning("Annual financial seed failed for %s: %s", t, exc)
 
     try:
-        inc_q  = await fmp.get_income_statement(t, limit=20, period="quarter")
-        bal_q  = await fmp.get_balance_sheet(t,     limit=20, period="quarter")
-        cf_q   = await fmp.get_cash_flow(t,          limit=20, period="quarter")
+        inc_q, bal_q, cf_q = await asyncio.gather(
+            fmp.get_income_statement(t, limit=20, period="quarter"),
+            fmp.get_balance_sheet(t,     limit=20, period="quarter"),
+            fmp.get_cash_flow(t,          limit=20, period="quarter"),
+        )
         _seed_financials("quarter", inc_q, bal_q, cf_q)
     except Exception as exc:
         _log.warning("Quarterly financial seed failed for %s: %s", t, exc)
@@ -312,17 +443,28 @@ async def search_stocks(q: str = Query("", min_length=1), db: Session = Depends(
     ]
     local_symbols = {r["symbol"] for r in local}
 
-    # 2. yfinance Search — fills gaps not in DB
+    # 2. FMP search — reliable, covers virtually all listed equities
     try:
-        loop = asyncio.get_event_loop()
-        yf_results = await loop.run_in_executor(
-            None, functools.partial(_yf_search, q.strip(), 10)
-        )
-        for hit in yf_results:
+        fmp_results = await fmp.search(q.strip(), limit=10)
+        for hit in fmp_results:
             if hit["symbol"] not in local_symbols:
                 local.append(hit)
+                local_symbols.add(hit["symbol"])
     except Exception:
         pass
+
+    # 3. yfinance Search — extra fallback for any remaining gaps
+    if len(local) < 5:
+        try:
+            loop = asyncio.get_event_loop()
+            yf_results = await loop.run_in_executor(
+                None, functools.partial(_yf_search, q.strip(), 10)
+            )
+            for hit in yf_results:
+                if hit["symbol"] not in local_symbols:
+                    local.append(hit)
+        except Exception:
+            pass
 
     results = local[:10]
     cache.cache_set(cache_key, results, ttl=300)
@@ -406,7 +548,13 @@ async def get_multiples_history(ticker: str):
     if cached:
         return cached
 
-    ratios = await fmp.get_ratios(t, limit=10)
+    # Reuse ratios already fetched during stock refresh (saves 1 FMP call)
+    ratios_cache_key = cache.make_key("ratios_raw", ticker=t)
+    ratios = cache.cache_get(ratios_cache_key)
+    if not ratios:
+        ratios = await fmp.get_ratios(t, limit=10)
+        if ratios:
+            cache.cache_set(ratios_cache_key, ratios, ttl=86400)
 
     def _avg(key, records):
         vals = [fmp.safe_float(r.get(key)) for r in records]
@@ -478,3 +626,106 @@ async def seed_stocks(db: Session = Depends(get_db)):
         except Exception as e:
             results["failed"].append({"ticker": ticker, "error": str(e)})
     return results
+
+
+@router.post("/rescore", status_code=200)
+async def rescore_all_stocks(db: Session = Depends(get_db)):
+    """Recompute GuruScore for every stock using existing DB data — no FMP calls.
+    Fills in missing metrics from the Financial table, then bulk-clears Redis caches.
+    """
+    stocks = db.query(Stock).all()
+
+    # Bulk-load all annual Financial rows (1 query instead of N)
+    all_ann = (
+        db.query(Financial)
+        .filter(Financial.period == "annual")
+        .order_by(Financial.ticker, Financial.date.desc())
+        .all()
+    )
+    fin_by_ticker: dict[str, list[Financial]] = defaultdict(list)
+    for f in all_ann:
+        if len(fin_by_ticker[f.ticker]) < 2:
+            fin_by_ticker[f.ticker].append(f)
+
+    for stock in stocks:
+        t = stock.ticker
+        ann  = fin_by_ticker.get(t, [])
+        cur  = ann[0] if ann else None
+        prev = ann[1] if len(ann) >= 2 else None
+
+        fb = _derive_missing_metrics(
+            revenue=cur.revenue if cur else None,
+            gross_profit=cur.gross_profit if cur else None,
+            op_income=cur.operating_income if cur else None,
+            net_income=cur.net_income if cur else None,
+            ebitda=cur.ebitda if cur else None,
+            equity=cur.total_equity if cur else None,
+            assets=cur.total_assets if cur else None,
+            debt=cur.total_debt if cur else None,
+            ca=cur.current_assets if cur else None,
+            cl=cur.current_liabilities if cur else None,
+            inv=cur.inventory or 0 if cur else 0,
+            ltd=cur.long_term_debt if cur else None,
+            cash=cur.cash or 0 if cur else 0,
+            fcf=cur.fcf if cur else None,
+            price=stock.current_price,
+            mktcap=stock.market_cap,
+            shares=cur.shares_outstanding if cur else None,
+            eps=cur.eps if cur else None,
+            rev_prev=prev.revenue if prev else None,
+            eps_prev=prev.eps if prev else None,
+            fcf_prev=prev.fcf if prev else None,
+        )
+
+        # Apply fallback values only where existing data is missing
+        stock.pe_ratio         = stock.pe_ratio         or fb.get("pe_ratio")
+        stock.pb_ratio         = stock.pb_ratio         or fb.get("pb_ratio")
+        stock.pfcf_ratio       = stock.pfcf_ratio       or fb.get("pfcf_ratio")
+        stock.ps_ratio         = stock.ps_ratio         or fb.get("ps_ratio")
+        stock.ev_ebitda        = stock.ev_ebitda        or fb.get("ev_ebitda")
+        stock.roe              = stock.roe              or fb.get("roe")
+        stock.roic             = stock.roic             or fb.get("roic")
+        stock.roa              = stock.roa              or fb.get("roa")
+        stock.gross_margin     = stock.gross_margin     or fb.get("gross_margin")
+        stock.operating_margin = stock.operating_margin or fb.get("operating_margin")
+        stock.profit_margin    = stock.profit_margin    or fb.get("profit_margin")
+        stock.de_ratio         = stock.de_ratio         or fb.get("de_ratio")
+        stock.current_ratio    = stock.current_ratio    or fb.get("current_ratio")
+        stock.quick_ratio      = stock.quick_ratio      or fb.get("quick_ratio")
+        stock.interest_coverage= stock.interest_coverage or fb.get("interest_coverage")
+        stock.revenue_growth   = stock.revenue_growth   or fb.get("revenue_growth")
+        stock.eps_growth       = stock.eps_growth       or fb.get("eps_growth")
+        stock.fcf_growth       = stock.fcf_growth       or fb.get("fcf_growth")
+
+        scores = score_svc.guru_score(
+            pe_ratio=stock.pe_ratio, pb_ratio=stock.pb_ratio,
+            pfcf_ratio=stock.pfcf_ratio, ev_ebitda=stock.ev_ebitda,
+            roe=stock.roe, roic=stock.roic, gross_margin=stock.gross_margin,
+            piotroski=stock.piotroski_score,
+            revenue_growth=stock.revenue_growth, eps_growth=stock.eps_growth,
+            fcf_growth=stock.fcf_growth, de_ratio=stock.de_ratio,
+            current_ratio=stock.current_ratio, altman_z=stock.altman_z,
+            beta=stock.beta,
+        )
+        stock.guru_score    = scores["guru_score"]
+        stock.guru_value    = scores["guru_value"]
+        stock.guru_quality  = scores["guru_quality"]
+        stock.guru_growth   = scores["guru_growth"]
+        stock.guru_strength = scores["guru_strength"]
+        stock.guru_risk     = scores["guru_risk"]
+
+    db.commit()
+
+    # Bulk-delete all cache keys in a single Redis call
+    cache_keys = [
+        cache.make_key(pfx, ticker=s.ticker)
+        for s in stocks
+        for pfx in ("stock_detail", "analysis", "multiples_hist")
+    ] + [
+        cache.make_key("financials", ticker=s.ticker, period=p)
+        for s in stocks
+        for p in ("annual", "quarter")
+    ]
+    cache.cache_delete_many(*cache_keys)
+
+    return {"updated": len(stocks), "message": f"Rescored {len(stocks)} stocks and cleared their caches."}

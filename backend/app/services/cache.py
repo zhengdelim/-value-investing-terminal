@@ -29,5 +29,10 @@ def cache_delete(key: str) -> None:
     redis_client.delete(key)
 
 
+def cache_delete_many(*keys: str) -> None:
+    if keys:
+        redis_client.delete(*keys)
+
+
 def make_key(prefix: str, **kwargs) -> str:
     return _key(prefix, **kwargs)

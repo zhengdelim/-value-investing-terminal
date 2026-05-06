@@ -101,7 +101,7 @@ export default function StockDetail() {
         <div className="text-center">
           <div className="text-4xl mb-3">⚠️</div>
           <p className="text-sm font-semibold text-gray-300">Could not load data for {ticker}</p>
-          <p className="text-xs mt-1 text-muted">FMP may be rate-limited (free plan: 300 req/min). Try again in a moment.</p>
+          <p className="text-xs mt-1 text-muted">FMP free plan allows ~250 requests/day. Quota may be exhausted — try again later or click Refresh.</p>
           <div className="flex gap-3 justify-center mt-4">
             <button onClick={() => refetch()} className="text-xs text-accent-blue hover:underline">↻ Retry</button>
             <button onClick={() => navigate("/")} className="text-xs text-muted hover:text-gray-300">← Back</button>
