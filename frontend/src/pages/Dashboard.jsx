@@ -37,6 +37,7 @@ export default function Dashboard() {
   const [rescoring, setRescoring]       = useState(false);
   const [rescoreMsg, setRescoreMsg]     = useState(null);
   const [scoreFilter, setScoreFilter]   = useState(null);
+  const [mobileFilters, setMobileFilters] = useState(false);
   const rescoreTimer                    = useRef(null);
   const searchRef = useRef(null);
   const navigate  = useNavigate();
@@ -137,29 +138,31 @@ export default function Dashboard() {
           onChange={handleChange}
           onReset={handleReset}
           onPreset={setFilters}
+          mobileOpen={mobileFilters}
+          onMobileClose={() => setMobileFilters(false)}
         />
       )}
 
       <main className="flex-1 overflow-y-auto min-w-0">
 
         {/* ── Top bar ─────────────────────────────────────────── */}
-        <div className="sticky top-0 z-10 bg-bg-primary border-b border-bg-border px-6 py-3 flex items-center gap-4">
+        <div className="sticky top-0 z-10 bg-bg-primary border-b border-bg-border px-3 sm:px-6 py-2 sm:py-3 flex items-center gap-2 sm:gap-4">
           <span className="text-sm font-bold font-mono text-accent-blue tracking-wide whitespace-nowrap">
-            ValueScreen
+            VS
           </span>
 
           {/* Tabs */}
-          <div className="flex gap-1">
+          <div className="flex gap-0.5 sm:gap-1">
             {TABS.map((t) => (
               <button key={t.id} onClick={() => setActiveTab(t.id)}
                 className={clsx(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                  "flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
                   activeTab === t.id
                     ? "bg-accent-blue text-white"
                     : "text-muted hover:text-gray-200 hover:bg-bg-hover"
                 )}>
                 <span className="text-[11px]">{t.icon}</span>
-                {t.label}
+                <span className="hidden sm:inline">{t.label}</span>
                 {t.id === "watchlist" && watchedTickers.length > 0 && (
                   <span className="bg-yellow text-bg-primary font-mono font-bold text-[9px] px-1 rounded-full leading-tight">
                     {watchedTickers.length}
@@ -168,6 +171,14 @@ export default function Dashboard() {
               </button>
             ))}
           </div>
+
+          {/* Mobile filters button */}
+          {activeTab === "screener" && (
+            <button onClick={() => setMobileFilters(true)}
+              className="md:hidden text-xs px-2.5 py-1.5 rounded border border-bg-border text-muted hover:text-gray-200 hover:bg-bg-hover transition-colors shrink-0">
+              ⚙
+            </button>
+          )}
 
           {/* Search — screener only */}
           {activeTab === "screener" && (
@@ -217,16 +228,16 @@ export default function Dashboard() {
           )}
 
           {/* Right-side controls */}
-          <div className="ml-auto flex items-center gap-2 shrink-0">
+          <div className="ml-auto flex items-center gap-1.5 sm:gap-2 shrink-0">
             {activeTab === "screener" && (
               <>
-                <span className="text-xs text-muted font-mono">{displayed.length} results</span>
+                <span className="hidden sm:inline text-xs text-muted font-mono">{displayed.length} results</span>
                 <button
                   onClick={handleRescore}
                   disabled={rescoring}
                   title="Recompute GuruScores from DB data — no API quota used"
                   className={clsx(
-                    "text-xs px-3 py-1.5 rounded border transition-colors whitespace-nowrap flex items-center gap-1.5",
+                    "text-xs px-2 sm:px-3 py-1.5 rounded border transition-colors whitespace-nowrap flex items-center gap-1.5",
                     rescoring
                       ? "border-bg-border text-muted cursor-not-allowed"
                       : rescoreMsg
@@ -234,12 +245,12 @@ export default function Dashboard() {
                       : "border-yellow/30 text-yellow hover:bg-yellow/10"
                   )}>
                   {rescoring
-                    ? <><span className="w-3 h-3 border border-yellow border-t-transparent rounded-full animate-spin" />Rescoring…</>
-                    : rescoreMsg ?? "↻ Rescore All"}
+                    ? <><span className="w-3 h-3 border border-yellow border-t-transparent rounded-full animate-spin" /><span className="hidden sm:inline">Rescoring…</span></>
+                    : rescoreMsg ?? <><span>↻</span><span className="hidden sm:inline ml-1">Rescore All</span></>}
                 </button>
                 <button onClick={() => setShowSeed(true)}
-                  className="text-xs px-3 py-1.5 rounded border border-accent-blue/30 text-accent-blue hover:bg-accent-blue/10 transition-colors whitespace-nowrap">
-                  + S&P 500
+                  className="text-xs px-2 sm:px-3 py-1.5 rounded border border-accent-blue/30 text-accent-blue hover:bg-accent-blue/10 transition-colors whitespace-nowrap">
+                  <span className="hidden sm:inline">+ </span>S&P 500
                 </button>
               </>
             )}

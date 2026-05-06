@@ -72,15 +72,30 @@ const PRESETS = [
   },
 ];
 
-export default function Sidebar({ filters, onChange, onReset, onPreset, adamKhooPreset }) {
+export default function Sidebar({ filters, onChange, onReset, onPreset, mobileOpen, onMobileClose }) {
   return (
-    <aside className="w-64 shrink-0 bg-bg-secondary border-r border-bg-border h-screen sticky top-0 overflow-y-auto flex flex-col">
-      <div className="p-4 border-b border-bg-border">
-        <h1 className="text-lg font-semibold tracking-tight">
-          <span className="text-accent-blue font-mono">VS</span>
-          <span className="ml-2 text-gray-100">ValueScreen</span>
-        </h1>
-        <p className="text-xs text-muted mt-0.5">Value Investing Terminal</p>
+    <>
+      {mobileOpen && (
+        <div className="fixed inset-0 bg-black/60 z-40 md:hidden" onClick={onMobileClose} />
+      )}
+    <aside className={clsx(
+      "w-64 shrink-0 bg-bg-secondary border-r border-bg-border overflow-y-auto flex flex-col z-50",
+      mobileOpen
+        ? "fixed inset-y-0 left-0 h-full"
+        : "hidden md:flex md:sticky md:top-0 md:h-screen"
+    )}>
+      <div className="p-4 border-b border-bg-border flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight">
+            <span className="text-accent-blue font-mono">VS</span>
+            <span className="ml-2 text-gray-100">ValueScreen</span>
+          </h1>
+          <p className="text-xs text-muted mt-0.5">Value Investing Terminal</p>
+        </div>
+        {mobileOpen && (
+          <button onClick={onMobileClose}
+            className="md:hidden text-muted hover:text-gray-200 text-lg leading-none p-1">✕</button>
+        )}
       </div>
 
       <div className="p-4 flex-1">
@@ -145,5 +160,6 @@ export default function Sidebar({ filters, onChange, onReset, onPreset, adamKhoo
         </Section>
       </div>
     </aside>
+    </>
   );
 }

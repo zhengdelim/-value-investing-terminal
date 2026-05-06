@@ -114,7 +114,7 @@ export default function StockDetail() {
   return (
     <div className="min-h-screen">
       {/* Header */}
-      <div className="bg-bg-secondary border-b border-bg-border px-6 py-4">
+      <div className="bg-bg-secondary border-b border-bg-border px-3 sm:px-6 py-3 sm:py-4">
         <div className="flex items-center justify-between mb-3">
           <button onClick={() => navigate("/")} className="text-xs text-muted hover:text-gray-300 flex items-center gap-1">
             ← Back to Screener
@@ -139,45 +139,45 @@ export default function StockDetail() {
             )}
           </button>
         </div>
-        <div className="flex flex-wrap items-start gap-6">
+        <div className="flex flex-wrap items-start gap-3 sm:gap-6">
           {stock.image && (
-            <img src={stock.image} alt={stock.name} className="w-12 h-12 rounded-lg object-contain bg-white p-1" />
+            <img src={stock.image} alt={stock.name} className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg object-contain bg-white p-1" />
           )}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl font-bold font-mono text-accent-blue">{stock.ticker}</h1>
-              <span className="text-gray-300 text-lg font-medium">{stock.name}</span>
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-bold font-mono text-accent-blue">{stock.ticker}</h1>
+              <span className="text-gray-300 text-base sm:text-lg font-medium truncate max-w-[180px] sm:max-w-none">{stock.name}</span>
               {stock.exchange && (
                 <span className="text-xs bg-bg-hover border border-bg-border rounded px-2 py-0.5 text-muted">{stock.exchange}</span>
               )}
             </div>
-            <div className="flex items-center gap-3 mt-1 flex-wrap text-xs text-muted">
+            <div className="flex items-center gap-2 sm:gap-3 mt-1 flex-wrap text-xs text-muted">
               {stock.sector && <span>{stock.sector}</span>}
-              {stock.industry && <span>· {stock.industry}</span>}
+              {stock.industry && <span className="hidden sm:inline">· {stock.industry}</span>}
               {stock.country && <span>· {stock.country}</span>}
               {stock.website && (
-                <a href={stock.website} target="_blank" rel="noopener noreferrer" className="text-accent-blue hover:underline">
+                <a href={stock.website} target="_blank" rel="noopener noreferrer" className="text-accent-blue hover:underline hidden sm:inline">
                   {stock.website.replace(/^https?:\/\//, "")}
                 </a>
               )}
             </div>
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3 sm:gap-6">
             <div>
-              <div className="font-mono text-3xl font-bold text-gray-100">
+              <div className="font-mono text-2xl sm:text-3xl font-bold text-gray-100">
                 {stock.current_price != null ? `$${stock.current_price.toFixed(2)}` : "—"}
               </div>
               <div className="text-xs text-muted mt-0.5">{stock.currency ?? "USD"}</div>
             </div>
             <div className="flex flex-col items-center gap-1">
-              <GuruScoreRing score={stock.guru_score} size={64} />
+              <GuruScoreRing score={stock.guru_score} size={52} />
               <span className="text-xs text-muted">GuruScore</span>
             </div>
           </div>
         </div>
 
         {/* Score pillars */}
-        <div className="flex gap-6 mt-4 pt-4 border-t border-bg-border flex-wrap">
+        <div className="flex gap-3 sm:gap-6 mt-4 pt-4 border-t border-bg-border flex-wrap">
           {[
             ["Value",    stock.guru_value],
             ["Quality",  stock.guru_quality],
@@ -572,7 +572,8 @@ export default function StockDetail() {
             <div className="card p-5">
               <h3 className="text-sm font-semibold text-gray-300 mb-3">Top Guru Holdings</h3>
               {insiders?.gurus?.length > 0 ? (
-                <table className="w-full text-sm">
+                <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[500px]">
                   <thead>
                     <tr className="text-xs text-muted uppercase tracking-wider border-b border-bg-border">
                       <th className="text-left pb-2">Guru</th>
@@ -596,6 +597,7 @@ export default function StockDetail() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               ) : (
                 <p className="text-muted text-sm">No major guru holdings found for this stock.</p>
               )}
@@ -605,7 +607,8 @@ export default function StockDetail() {
             <div className="card p-5">
               <h3 className="text-sm font-semibold text-gray-300 mb-3">Insider Transactions</h3>
               {insiders?.transactions?.length > 0 ? (
-                <table className="w-full text-sm">
+                <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[480px]">
                   <thead>
                     <tr className="text-xs text-muted uppercase tracking-wider border-b border-bg-border">
                       <th className="text-left pb-2">Insider</th>
@@ -642,6 +645,7 @@ export default function StockDetail() {
                     })}
                   </tbody>
                 </table>
+                </div>
               ) : (
                 <p className="text-muted text-sm">No recent insider transactions found.</p>
               )}
