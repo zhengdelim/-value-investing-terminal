@@ -447,23 +447,49 @@ def _safe(val):
         return None
 
 
+def _parse_tx_type(row) -> str | None:
+    explicit = _safe(row.get("Transaction") or row.get("transactionType"))
+    if explicit:
+        return explicit
+    text = str(row.get("Text") or "").lower()
+    if "sale" in text or "sold" in text:
+        return "Sale"
+    if "purchase" in text or "bought" in text or "buy" in text:
+        return "Purchase"
+    if "award" in text or "grant" in text:
+        return "Award/Grant"
+    if "gift" in text:
+        return "Gift"
+    if "exercise" in text:
+        return "Option Exercise"
+    if "conversion" in text:
+        return "Conversion"
+    return None
+
+
 def _fetch_insiders_sync(symbol: str) -> dict:
     t = yf.Ticker(symbol)
     transactions = []
     gurus = []
 
     try:
+        from datetime import datetime, timedelta
+        cutoff = datetime.now() - timedelta(days=365)
         df = t.insider_transactions
         if df is not None and not df.empty:
-            df = df.head(25)
-            for _, row in df.iterrows():
+            date_col = next((c for c in ["Start Date", "Date", "startDate"] if c in df.columns), None)
+            if date_col:
+                df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+                df = df[df[date_col] >= cutoff]
+            for _, row in df.head(30).iterrows():
+                date_val = row.get("Start Date") or row.get("Date") or row.get("startDate")
                 transactions.append({
                     "name": _safe(row.get("Insider") or row.get("filerName")),
                     "position": _safe(row.get("Position") or row.get("filerRelation")),
-                    "transaction_type": _safe(row.get("Transaction") or row.get("transactionType")),
+                    "transaction_type": _parse_tx_type(row),
                     "shares": _safe(row.get("Shares") or row.get("shares")),
                     "value": _safe(row.get("Value") or row.get("value")),
-                    "date": str(row.get("Date") or row.get("startDate") or "")[:10] or None,
+                    "date": str(date_val)[:10] if date_val and str(date_val) != "NaT" else None,
                 })
     except Exception:
         pass
@@ -477,7 +503,7 @@ def _fetch_insiders_sync(symbol: str) -> dict:
                     if key.lower() in holder.lower():
                         shares = _safe(row.get("Shares") or row.get("shares"))
                         value = _safe(row.get("Value") or row.get("value"))
-                        pct = _safe(row.get("% Out") or row.get("pctHeld"))
+                        pct = _safe(row.get("pctHeld") or row.get("% Out"))
                         date_rep = row.get("Date Reported") or row.get("reportDate")
                         gurus.append({
                             "holder": holder,
