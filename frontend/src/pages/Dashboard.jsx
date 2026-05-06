@@ -36,6 +36,7 @@ export default function Dashboard() {
   const [showSeedModal, setShowSeed]    = useState(false);
   const [rescoring, setRescoring]       = useState(false);
   const [rescoreMsg, setRescoreMsg]     = useState(null);
+  const [scoreFilter, setScoreFilter]   = useState(null);
   const rescoreTimer                    = useRef(null);
   const searchRef = useRef(null);
   const navigate  = useNavigate();
@@ -62,11 +63,16 @@ export default function Dashboard() {
 
   // Screener stocks
   const { data: stocks, isLoading } = useStocks(filters);
-  const displayed = search
+  const baseList = search
     ? (stocks ?? []).filter((s) =>
         s.ticker.toLowerCase().includes(search.toLowerCase()) ||
         s.name?.toLowerCase().includes(search.toLowerCase()))
     : stocks ?? [];
+  const displayed = scoreFilter === "undervalued"
+    ? baseList.filter((s) => s.guru_value != null && s.guru_value >= 70)
+    : scoreFilter === "quality"
+    ? baseList.filter((s) => s.guru_score != null && s.guru_score >= 70)
+    : baseList;
 
   const showSidebar = activeTab === "screener";
 
@@ -97,11 +103,13 @@ export default function Dashboard() {
     }
   }, []);
 
-  const handleChange = useCallback((field, value) =>
-    setFilters((p) => ({ ...p, [field]: value })), []);
+  const handleChange = useCallback((field, value) => {
+    setScoreFilter(null);
+    setFilters((p) => ({ ...p, [field]: value }));
+  }, []);
 
   const handleReset = useCallback(() => {
-    setFilters(DEFAULT_FILTERS); setSearch("");
+    setFilters(DEFAULT_FILTERS); setSearch(""); setScoreFilter(null);
   }, []);
 
   const handleSearchKey = useCallback((e) => {
@@ -247,7 +255,7 @@ export default function Dashboard() {
 
         {activeTab === "screener" && (
           <div className="p-6">
-            <ScoreCards stocks={displayed} />
+            <ScoreCards stocks={baseList} activeFilter={scoreFilter} onFilter={setScoreFilter} />
             <div className="card overflow-hidden">
               <StockTable stocks={displayed} isLoading={isLoading}
                 isWatched={isWatched} onToggleWatch={toggleWatch} />
