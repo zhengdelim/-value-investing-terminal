@@ -27,39 +27,36 @@ function IndexCard({ d }) {
   const dotCls  = STATE_DOT[d.market_state] ?? "bg-subtle";
 
   return (
-    <div className="flex flex-col gap-0.5 px-5 py-3 border-r border-bg-border last:border-0 min-w-[130px]">
+    <div className="flex flex-col gap-0.5 px-3 sm:px-5 py-2 sm:py-3 border-r border-bg-border last:border-0 min-w-[110px] sm:min-w-[140px]">
       {/* Label + market state dot */}
       <div className="flex items-center gap-1.5">
         <span className={clsx("w-1.5 h-1.5 rounded-full shrink-0", dotCls)} />
-        <span className="text-[10px] font-semibold text-muted uppercase tracking-widest">
+        <span className="text-[10px] sm:text-[11px] font-semibold text-muted uppercase tracking-wider">
           {d.label}
         </span>
-        <span className="text-[9px] text-subtle ml-auto">{d.market_state}</span>
+        <span className="hidden sm:inline text-[9px] text-subtle ml-auto">{d.market_state}</span>
       </div>
 
       {/* Price */}
-      <div className="font-mono font-bold text-base text-gray-100 leading-none">
+      <div className="font-mono font-bold text-sm sm:text-base text-gray-100 leading-none">
         {fmt(d.price, d.currency)}
-        <span className="text-[9px] font-normal text-subtle ml-1">{d.currency}</span>
+        <span className="hidden sm:inline text-[9px] font-normal text-subtle ml-1">{d.currency}</span>
       </div>
 
       {/* Change */}
       <div className={clsx(
-        "flex items-center gap-1.5 text-xs font-mono",
+        "flex items-center gap-1 text-xs font-mono",
         up ? "text-green" : down ? "text-red" : "text-muted"
       )}>
-        <span>{up ? "▲" : down ? "▼" : "—"}</span>
-        <span>
-          {d.change != null ? `${d.change >= 0 ? "+" : ""}${fmt(d.change, d.currency)}` : "—"}
-        </span>
+        <span className="text-[10px]">{up ? "▲" : down ? "▼" : "—"}</span>
         <span className="text-[11px]">
-          {d.change_pct != null ? `(${d.change_pct >= 0 ? "+" : ""}${d.change_pct.toFixed(2)}%)` : ""}
+          {d.change_pct != null ? `${d.change_pct >= 0 ? "+" : ""}${d.change_pct.toFixed(2)}%` : "—"}
         </span>
       </div>
 
-      {/* Day range */}
+      {/* Day range — desktop only */}
       {(d.day_low != null && d.day_high != null) && (
-        <div className="text-[9px] text-subtle font-mono mt-0.5">
+        <div className="hidden sm:block text-[9px] text-subtle font-mono mt-0.5">
           L {fmt(d.day_low)} · H {fmt(d.day_high)}
         </div>
       )}
@@ -84,7 +81,7 @@ function SnapshotTime({ ts }) {
   const date = d.toLocaleDateString("en-SG", { day: "2-digit", month: "short", year: "numeric" });
   const time = d.toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
   return (
-    <div className="flex flex-col items-end justify-center px-5 shrink-0 border-l border-bg-border">
+    <div className="hidden sm:flex flex-col items-end justify-center px-5 shrink-0 border-l border-bg-border">
       <span className="text-[9px] text-subtle uppercase tracking-widest">Snapshot</span>
       <span className="text-[11px] font-mono text-gray-400 whitespace-nowrap">{date}</span>
       <span className="text-[13px] font-mono font-semibold text-gray-200 whitespace-nowrap leading-tight">{time}</span>
