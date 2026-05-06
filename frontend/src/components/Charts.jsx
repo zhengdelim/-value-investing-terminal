@@ -6,8 +6,8 @@ import {
 
 const TT = {
   contentStyle: {
-    backgroundColor: "#181b28",
-    border: "1px solid #242736",
+    backgroundColor: "#222224",
+    border: "1px solid #2e2e30",
     borderRadius: "8px",
     fontSize: 13,
     color: "#ffffff",
@@ -17,9 +17,9 @@ const TT = {
   itemStyle: { color: "#ffffff", fontWeight: 700 },
 };
 
-const LABEL_STYLE = { fontSize: 11, fill: "#ffffff", fontWeight: 700 };
-const AXIS_TICK   = { fill: "#ffffff", fontSize: 12, fontWeight: 700 };
-const AXIS_TICK_SM = { fill: "#ffffff", fontSize: 10, fontWeight: 600 };
+const AXIS_TICK    = { fill: "#9ca3af", fontSize: 12, fontWeight: 600 };
+const AXIS_TICK_SM = { fill: "#9ca3af", fontSize: 10, fontWeight: 600 };
+const GRID_COLOR   = "#2e2e30";
 
 function shortYear(d) {
   return d ? String(d).slice(0, 4) : "";
@@ -42,18 +42,17 @@ function sliceData(data, period, quarterLimit = 20) {
   return [...(data ?? [])].slice(0, limit).reverse();
 }
 
-// Returns layout settings that adapt to the number of data points
 function adapt(count) {
   const dense = count > 8;
   return {
-    height: dense ? 320 : 280,
-    margin: { top: 24, right: 12, left: 0, bottom: dense ? 55 : 4 },
+    height: dense ? 340 : 300,
+    margin: { top: 44, right: 12, left: 0, bottom: dense ? 55 : 4 },
     xTick: dense ? AXIS_TICK_SM : AXIS_TICK,
     xAngle: dense ? -45 : 0,
     xAnchor: dense ? "end" : "middle",
     xInterval: dense ? 0 : "preserveStartEnd",
     xHeight: dense ? 65 : 30,
-    showLabels: !dense,
+    dense,
     dotR: dense ? 2 : 3,
   };
 }
@@ -65,6 +64,50 @@ function inB(v) {
 function fmtB(v) {
   if (v == null) return "";
   return v >= 1 ? `$${v.toFixed(2)}B` : `$${(v * 1000).toFixed(2)}M`;
+}
+
+function fmtVal(v) {
+  if (v == null) return "";
+  return `$${Number(v).toFixed(2)}`;
+}
+
+// Custom recharts label that renders value + YoY growth % above each bar
+function makeBarLabel(chartData, dataKey, valFormatter) {
+  return function BarGrowthLabel({ x, y, width, value, index }) {
+    if (value == null || !width || width < 8) return null;
+
+    const prev = index > 0 ? chartData[index - 1]?.[dataKey] : null;
+    const growth =
+      prev != null && prev !== 0
+        ? ((value - prev) / Math.abs(prev)) * 100
+        : null;
+
+    const dense = chartData.length > 8;
+    const fs = dense ? 9 : 10;
+    const cx = x + width / 2;
+    const growthColor = growth == null ? "#9ca3af" : growth >= 0 ? "#4ade80" : "#ef4444";
+    const growthStr =
+      growth != null ? `${growth >= 0 ? "+" : ""}${growth.toFixed(1)}%` : null;
+
+    if (dense) {
+      // Dense: show growth % only (space is tight)
+      return growthStr ? (
+        <text x={cx} y={y - 3} textAnchor="middle" fontSize={fs}
+          fill={growthColor} fontWeight={700}>{growthStr}</text>
+      ) : null;
+    }
+
+    return (
+      <g>
+        {growthStr && (
+          <text x={cx} y={y - 14} textAnchor="middle" fontSize={fs}
+            fill={growthColor} fontWeight={700}>{growthStr}</text>
+        )}
+        <text x={cx} y={y - 3} textAnchor="middle" fontSize={fs}
+          fill="#e5e7eb" fontWeight={600}>{valFormatter(value)}</text>
+      </g>
+    );
+  };
 }
 
 function EmptyChart({ title }) {
@@ -96,17 +139,17 @@ export function RevenueChart({ data, isLoading, period = "annual", quarterLimit 
       <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">{title}</h4>
       <ResponsiveContainer width="100%" height={a.height}>
         <BarChart data={chartData} margin={a.margin} barCategoryGap="20%">
-          <CartesianGrid strokeDasharray="3 3" stroke="#242736" vertical={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
           <XAxis dataKey="year" tick={a.xTick} axisLine={false} tickLine={false}
             angle={a.xAngle} textAnchor={a.xAnchor} interval={a.xInterval} height={a.xHeight} />
           <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={45} />
           <Tooltip {...TT} formatter={(v) => [`$${v?.toFixed(2)}B`]} />
-          <Legend wrapperStyle={{ fontSize: 12, color: "#ffffff", fontWeight: 700 }} />
-          <Bar dataKey="Revenue" fill="#4f8ef7" radius={[3, 3, 0, 0]}>
-            {a.showLabels && <LabelList dataKey="Revenue" position="top" formatter={fmtB} style={LABEL_STYLE} />}
+          <Legend wrapperStyle={{ fontSize: 12, color: "#9ca3af", fontWeight: 600 }} />
+          <Bar dataKey="Revenue" fill="#22c55e" radius={[3, 3, 0, 0]}>
+            <LabelList content={makeBarLabel(chartData, "Revenue", fmtB)} />
           </Bar>
-          <Bar dataKey="Gross Profit" fill="#22c55e" radius={[3, 3, 0, 0]}>
-            {a.showLabels && <LabelList dataKey="Gross Profit" position="top" formatter={fmtB} style={LABEL_STYLE} />}
+          <Bar dataKey="Gross Profit" fill="#10b981" radius={[3, 3, 0, 0]}>
+            <LabelList content={makeBarLabel(chartData, "Gross Profit", fmtB)} />
           </Bar>
         </BarChart>
       </ResponsiveContainer>
@@ -131,18 +174,14 @@ export function EPSChart({ data, isLoading, period = "annual", quarterLimit = 20
       <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">{title}</h4>
       <ResponsiveContainer width="100%" height={a.height}>
         <BarChart data={chartData} margin={a.margin}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#242736" vertical={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
           <XAxis dataKey="year" tick={a.xTick} axisLine={false} tickLine={false}
             angle={a.xAngle} textAnchor={a.xAnchor} interval={a.xInterval} height={a.xHeight} />
           <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={45} />
           <Tooltip {...TT} formatter={(v) => [`$${v?.toFixed(2)}`]} />
-          <ReferenceLine y={0} stroke="#374151" />
-          <Bar dataKey="EPS" fill="#8b5cf6" radius={[3, 3, 0, 0]}>
-            {a.showLabels && (
-              <LabelList dataKey="EPS" position="top"
-                formatter={(v) => `$${v?.toFixed(2)}`}
-                style={LABEL_STYLE} />
-            )}
+          <ReferenceLine y={0} stroke="#3f3f41" />
+          <Bar dataKey="EPS" fill="#22c55e" radius={[3, 3, 0, 0]}>
+            <LabelList content={makeBarLabel(chartData, "EPS", fmtVal)} />
           </Bar>
         </BarChart>
       </ResponsiveContainer>
@@ -167,14 +206,14 @@ export function NetIncomeChart({ data, isLoading, period = "annual", quarterLimi
       <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">{title}</h4>
       <ResponsiveContainer width="100%" height={a.height}>
         <BarChart data={chartData} margin={a.margin}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#242736" vertical={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
           <XAxis dataKey="year" tick={a.xTick} axisLine={false} tickLine={false}
             angle={a.xAngle} textAnchor={a.xAnchor} interval={a.xInterval} height={a.xHeight} />
           <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={45} />
           <Tooltip {...TT} formatter={(v) => [`$${v?.toFixed(2)}B`]} />
-          <ReferenceLine y={0} stroke="#374151" />
+          <ReferenceLine y={0} stroke="#3f3f41" />
           <Bar dataKey="Net Income" fill="#f59e0b" radius={[3, 3, 0, 0]}>
-            {a.showLabels && <LabelList dataKey="Net Income" position="top" formatter={fmtB} style={LABEL_STYLE} />}
+            <LabelList content={makeBarLabel(chartData, "Net Income", fmtB)} />
           </Bar>
         </BarChart>
       </ResponsiveContainer>
@@ -200,18 +239,18 @@ export function FCFChart({ data, isLoading, period = "annual", quarterLimit = 20
       <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">{title}</h4>
       <ResponsiveContainer width="100%" height={a.height}>
         <BarChart data={chartData} margin={a.margin} barCategoryGap="20%">
-          <CartesianGrid strokeDasharray="3 3" stroke="#242736" vertical={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
           <XAxis dataKey="year" tick={a.xTick} axisLine={false} tickLine={false}
             angle={a.xAngle} textAnchor={a.xAnchor} interval={a.xInterval} height={a.xHeight} />
           <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={45} />
           <Tooltip {...TT} formatter={(v) => [`$${v?.toFixed(2)}B`]} />
-          <Legend wrapperStyle={{ fontSize: 12, color: "#ffffff", fontWeight: 700 }} />
-          <ReferenceLine y={0} stroke="#374151" />
-          <Bar dataKey="Op. Cash Flow" fill="#4f8ef7" radius={[3, 3, 0, 0]}>
-            {a.showLabels && <LabelList dataKey="Op. Cash Flow" position="top" formatter={fmtB} style={LABEL_STYLE} />}
+          <Legend wrapperStyle={{ fontSize: 12, color: "#9ca3af", fontWeight: 600 }} />
+          <ReferenceLine y={0} stroke="#3f3f41" />
+          <Bar dataKey="Op. Cash Flow" fill="#10b981" radius={[3, 3, 0, 0]}>
+            <LabelList content={makeBarLabel(chartData, "Op. Cash Flow", fmtB)} />
           </Bar>
           <Bar dataKey="Free Cash Flow" fill="#22c55e" radius={[3, 3, 0, 0]}>
-            {a.showLabels && <LabelList dataKey="Free Cash Flow" position="top" formatter={fmtB} style={LABEL_STYLE} />}
+            <LabelList content={makeBarLabel(chartData, "Free Cash Flow", fmtB)} />
           </Bar>
         </BarChart>
       </ResponsiveContainer>
@@ -238,20 +277,32 @@ export function DebtChart({ data, isLoading, period = "annual", quarterLimit = 2
       <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">{title}</h4>
       <ResponsiveContainer width="100%" height={a.height}>
         <LineChart data={chartData} margin={a.margin}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#242736" vertical={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
           <XAxis dataKey="year" tick={a.xTick} axisLine={false} tickLine={false}
             angle={a.xAngle} textAnchor={a.xAnchor} interval={a.xInterval} height={a.xHeight} />
           <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={45} />
           <Tooltip {...TT} formatter={(v) => [`$${v?.toFixed(2)}B`]} />
-          <Legend wrapperStyle={{ fontSize: 12, color: "#ffffff", fontWeight: 700 }} />
-          <Line type="monotone" dataKey="Total Debt" stroke="#ef4444" strokeWidth={2} dot={{ r: a.dotR }} activeDot={{ r: 5 }}>
-            {a.showLabels && <LabelList dataKey="Total Debt" position="top" formatter={fmtB} style={{ ...LABEL_STYLE, fill: "#ef4444" }} />}
+          <Legend wrapperStyle={{ fontSize: 12, color: "#9ca3af", fontWeight: 600 }} />
+          <Line type="monotone" dataKey="Total Debt" stroke="#ef4444" strokeWidth={2}
+            dot={{ r: a.dotR }} activeDot={{ r: 5 }}>
+            {!a.dense && (
+              <LabelList dataKey="Total Debt" position="top" formatter={fmtB}
+                style={{ fontSize: 10, fill: "#ef4444", fontWeight: 700 }} />
+            )}
           </Line>
-          <Line type="monotone" dataKey="Cash" stroke="#22c55e" strokeWidth={2} dot={{ r: a.dotR }} activeDot={{ r: 5 }}>
-            {a.showLabels && <LabelList dataKey="Cash" position="top" formatter={fmtB} style={{ ...LABEL_STYLE, fill: "#22c55e" }} />}
+          <Line type="monotone" dataKey="Cash" stroke="#22c55e" strokeWidth={2}
+            dot={{ r: a.dotR }} activeDot={{ r: 5 }}>
+            {!a.dense && (
+              <LabelList dataKey="Cash" position="top" formatter={fmtB}
+                style={{ fontSize: 10, fill: "#22c55e", fontWeight: 700 }} />
+            )}
           </Line>
-          <Line type="monotone" dataKey="Net Debt" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="4 2" dot={{ r: a.dotR }} activeDot={{ r: 5 }}>
-            {a.showLabels && <LabelList dataKey="Net Debt" position="top" formatter={fmtB} style={{ ...LABEL_STYLE, fill: "#f59e0b" }} />}
+          <Line type="monotone" dataKey="Net Debt" stroke="#f59e0b" strokeWidth={1.5}
+            strokeDasharray="4 2" dot={{ r: a.dotR }} activeDot={{ r: 5 }}>
+            {!a.dense && (
+              <LabelList dataKey="Net Debt" position="top" formatter={fmtB}
+                style={{ fontSize: 10, fill: "#f59e0b", fontWeight: 700 }} />
+            )}
           </Line>
         </LineChart>
       </ResponsiveContainer>
