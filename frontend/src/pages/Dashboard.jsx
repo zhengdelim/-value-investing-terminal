@@ -70,7 +70,11 @@ export default function Dashboard() {
         s.name?.toLowerCase().includes(search.toLowerCase()))
     : stocks ?? [];
   const displayed = scoreFilter === "undervalued"
-    ? baseList.filter((s) => s.guru_value != null && s.guru_value >= 70)
+    ? baseList.filter(
+        (s) => s.guru_score != null && s.guru_score > 80
+             && s.dcf_upside != null && s.dcf_upside > 0.30
+             && s.roe != null && s.roe > 0.15,
+      )
     : scoreFilter === "quality"
     ? baseList.filter((s) => s.guru_score != null && s.guru_score >= 70)
     : baseList;

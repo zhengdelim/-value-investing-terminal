@@ -35,7 +35,12 @@ export default function ScoreCards({ stocks, activeFilter, onFilter }) {
       ? Math.round(withScore.reduce((a, s) => a + s.guru_score, 0) / withScore.length)
       : null;
 
-  const undervalued = stocks.filter((s) => s.guru_value != null && s.guru_value >= 70).length;
+  // Undervalued: GuruScore > 80, DCF upside > 30%, ROE > 15%
+  const undervalued = stocks.filter(
+    (s) => s.guru_score != null && s.guru_score > 80
+        && s.dcf_upside != null && s.dcf_upside > 0.30
+        && s.roe != null && s.roe > 0.15,
+  ).length;
   const highQuality = withScore.filter((s) => s.guru_score >= 70).length;
   const topPick = [...withScore].sort((a, b) => b.guru_score - a.guru_score)[0];
 
@@ -59,7 +64,7 @@ export default function ScoreCards({ stocks, activeFilter, onFilter }) {
       <StatCard
         label="Undervalued"
         value={undervalued}
-        sub="Value score ≥ 70 · click to filter"
+        sub="GuruScore>80 · DCF upside>30% · ROE>15% · click to filter"
         accent="text-accent-blue"
         onClick={() => toggle("undervalued")}
         active={activeFilter === "undervalued"}

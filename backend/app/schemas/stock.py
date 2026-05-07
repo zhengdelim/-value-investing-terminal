@@ -44,6 +44,7 @@ class StockSummary(BaseModel):
     guru_growth: Optional[float] = None
     guru_strength: Optional[float] = None
     guru_risk: Optional[float] = None
+    dcf_upside: Optional[float] = None
     last_updated: Optional[datetime] = None
 
     model_config = {"from_attributes": True}

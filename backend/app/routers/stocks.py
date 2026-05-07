@@ -14,6 +14,7 @@ from ..models.stock import Stock, Financial
 from ..schemas.stock import StockSummary, StockDetail
 from ..services import fmp, cache
 from ..services import scores as score_svc
+from ..services.dcf_calculator import run_dcf
 from .financials import _build_record
 
 router = APIRouter()
@@ -302,6 +303,27 @@ async def _refresh_stock(ticker: str, db: Session) -> Stock:
     stock.guru_growth = scores["guru_growth"]
     stock.guru_strength = scores["guru_strength"]
     stock.guru_risk = scores["guru_risk"]
+
+    # Compute default DCF upside (10% growth, 10% discount, 3% terminal, 10yr) and cache on stock
+    try:
+        base_fcf = sf(cf.get("freeCashFlow"))
+        if base_fcf and shares and shares > 0 and sf(profile.get("price")):
+            dcf_result = run_dcf(
+                ticker=t,
+                base_fcf=base_fcf,
+                current_price=sf(profile.get("price")),
+                shares_outstanding=shares,
+                growth_rate=0.10,
+                terminal_growth=0.03,
+                discount_rate=0.10,
+                years=10,
+            )
+            stock.dcf_upside = dcf_result.upside_downside
+        else:
+            stock.dcf_upside = None
+    except Exception:
+        stock.dcf_upside = None
+
     stock.last_updated = datetime.utcnow()
 
     db.commit()

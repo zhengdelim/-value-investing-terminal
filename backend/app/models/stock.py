@@ -72,6 +72,9 @@ class Stock(Base):
     guru_strength = Column(Float)
     guru_risk = Column(Float)
 
+    # Default DCF upside: (intrinsic_value - price) / price using 10% growth, 10% discount, 3% terminal
+    dcf_upside = Column(Float)
+
     last_updated = Column(DateTime, default=datetime.utcnow)
 
     financials = relationship("Financial", back_populates="stock", cascade="all, delete-orphan")
