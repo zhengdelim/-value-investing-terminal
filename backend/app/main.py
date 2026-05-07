@@ -2,7 +2,7 @@ import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .config import get_settings
-from .routers import stocks, financials, dcf, insiders, analysis, news, sp500, watchlist
+from .routers import stocks, financials, dcf, insiders, analysis, news, sp500, watchlist, us_stocks
 
 settings = get_settings()
 
@@ -27,7 +27,8 @@ app.include_router(insiders.router, prefix="/api/stocks", tags=["insiders"])
 app.include_router(analysis.router, prefix="/api/stocks", tags=["analysis"])
 app.include_router(news.router,      prefix="/api",           tags=["news"])
 app.include_router(sp500.router,     prefix="/api/sp500",     tags=["sp500"])
-app.include_router(watchlist.router, prefix="/api/watchlist", tags=["watchlist"])
+app.include_router(watchlist.router,  prefix="/api/watchlist",  tags=["watchlist"])
+app.include_router(us_stocks.router,  prefix="/api/us-stocks",  tags=["us-stocks"])
 
 
 @app.get("/health")

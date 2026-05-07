@@ -43,10 +43,14 @@ export const removeFromWatchlist= (wid, tickers) => api.post(`/watchlist/${wid}/
 export const updateWatchlist    = (wid, body)   => api.put(`/watchlist/${wid}`, body).then((r) => r.data);
 export const fetchWatchlistStocks = (wid)       => api.get(`/watchlist/${wid}/stocks`).then((r) => r.data);
 
-// S&P 500 seed
-export const fetchSp500Tickers  = ()            => api.get("/sp500/tickers").then((r) => r.data);
-export const startSp500Seed     = ()            => api.post("/sp500/seed").then((r) => r.data);
-export const fetchSeedProgress  = ()            => api.get("/sp500/progress").then((r) => r.data);
+// S&P 500 deep seed (full metrics per stock)
+export const fetchSp500Tickers    = ()          => api.get("/sp500/tickers").then((r) => r.data);
+export const startSp500Seed       = ()          => api.post("/sp500/seed").then((r) => r.data);
+export const fetchSeedProgress    = ()          => api.get("/sp500/progress").then((r) => r.data);
+
+// All US stocks bulk seed (basic data via screener — fast)
+export const startUsStocksSeed    = ()          => api.post("/us-stocks/seed").then((r) => r.data);
+export const fetchUsStocksProgress = ()         => api.get("/us-stocks/progress").then((r) => r.data);
 
 // Rescore all stocks from existing DB data (no FMP quota used)
 export const rescoreAllStocks   = ()            => api.post("/stocks/rescore").then((r) => r.data);

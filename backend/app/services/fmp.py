@@ -184,6 +184,24 @@ async def get_geographic_segments(ticker: str) -> list:
         return []
 
 
+async def get_us_screener_page(offset: int = 0, limit: int = 1000) -> list[dict]:
+    """Fetch one page of all active US stocks from FMP screener (NYSE+NASDAQ+AMEX)."""
+    try:
+        data = await _get(
+            "/stock-screener",
+            exchange="NYSE,NASDAQ,AMEX",
+            limit=limit,
+            offset=offset,
+            isEtf="false",
+            isFund="false",
+            isActivelyTrading="true",
+        )
+        return data if isinstance(data, list) else []
+    except Exception as exc:
+        _log.warning("FMP stock-screener failed (offset=%d): %s", offset, exc)
+        return []
+
+
 async def search(query: str, limit: int = 10) -> list[dict]:
     try:
         data = await _get("/search", query=query, limit=limit)
