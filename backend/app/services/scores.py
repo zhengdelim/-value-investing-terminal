@@ -349,3 +349,317 @@ def swot_moat_analysis(stock: dict) -> dict:
             "signals": moat_signals,
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# Sector benchmark profiles used by market_research & valuation_review
+# ---------------------------------------------------------------------------
+_SECTOR = {
+    "Technology":              {"ctx": "Technology companies command premium valuations through scalable models, network effects, and high switching costs. Gross margins above 60% and ROIC above 20% signal durable competitive advantage. Watch R&D intensity and revenue quality (recurring vs one-time).", "pe": 32, "pfcf": 25, "ev_ebitda": 20},
+    "Healthcare":              {"ctx": "Healthcare benefits from inelastic demand, patent moats, and regulatory barriers. Pricing power shows in gross margins above 55%. FDA pipeline and patent-cliff exposure are key idiosyncratic risks.", "pe": 26, "pfcf": 20, "ev_ebitda": 16},
+    "Consumer Discretionary":  {"ctx": "Consumer discretionary is economically sensitive. Brand strength and omnichannel presence are key moat sources. Strong FCF generation enables buybacks. Watch inventory turnover and same-store sales as leading indicators.", "pe": 22, "pfcf": 18, "ev_ebitda": 13},
+    "Consumer Staples":        {"ctx": "Staples offer defensive cash flows across economic cycles. Distribution network and brand recognition create durable moats. Dividend sustainability and payout coverage are key metrics for income investors.", "pe": 21, "pfcf": 18, "ev_ebitda": 14},
+    "Financials":              {"ctx": "Financials are valued on P/B and ROE rather than earnings multiples. Regulatory capital adequacy, net interest margin, and credit quality drive profitability. Trust and client relationships form the core moat.", "pe": 14, "pfcf": None, "ev_ebitda": None},
+    "Industrials":             {"ctx": "Industrials generate long-term contract revenue with high customer switching costs from installed equipment. ROIC relative to WACC is the primary value driver. Backlog growth and book-to-bill ratio are key leading indicators.", "pe": 21, "pfcf": 17, "ev_ebitda": 12},
+    "Energy":                  {"ctx": "Energy companies are exposed to commodity cycles. Reserve quality, breakeven production cost, and balance sheet strength determine survivability through troughs. FCF yield at mid-cycle price is the most robust valuation anchor.", "pe": 14, "pfcf": 10, "ev_ebitda": 8},
+    "Materials":               {"ctx": "Materials are cyclical, driven by global demand and commodity supply/demand dynamics. Low-cost production position and vertical integration provide competitive resilience. Watch China demand and capacity additions.", "pe": 16, "pfcf": 14, "ev_ebitda": 10},
+    "Real Estate":             {"ctx": "REITs are valued on FFO/AFFO multiples rather than P/E. Location quality, tenant credit, lease duration, and occupancy drive NAV. Dividend sustainability and interest rate sensitivity are paramount.", "pe": 22, "pfcf": 20, "ev_ebitda": 16},
+    "Communication Services":  {"ctx": "Communication services span telecom, media, and digital platforms. Network effects, content libraries, and subscriber lock-in are key moats. Pricing power varies widely across sub-industries; watch churn and ARPU trends.", "pe": 20, "pfcf": 17, "ev_ebitda": 12},
+    "Utilities":               {"ctx": "Utilities are regulated monopolies with predictable, low-growth cash flows. Rate cases and regulatory approvals determine ROE. They are prized for dividend yield and capital preservation rather than growth.", "pe": 18, "pfcf": 16, "ev_ebitda": 13},
+    "_default":                {"ctx": "Evaluate this company on absolute profitability (ROE, ROIC), balance sheet health, and cash flow quality relative to peers in the same industry. Apply a moderate margin of safety given limited sector-specific context.", "pe": 20, "pfcf": 16, "ev_ebitda": 12},
+}
+
+def _sf(v):
+    """Safe float — returns None for NaN, None, or non-numeric."""
+    try:
+        f = float(v)
+        return f if f == f else None
+    except (TypeError, ValueError):
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Market Research
+# ---------------------------------------------------------------------------
+def market_research(stock: dict) -> dict:
+    """
+    Generate structured market research narrative from quantitative metrics.
+    Returns quality/growth/fortress tiers plus thesis and risk bullets.
+    """
+    roe   = _sf(stock.get("roe"))
+    roic  = _sf(stock.get("roic"))
+    gm    = _sf(stock.get("gross_margin"))
+    pm    = _sf(stock.get("profit_margin"))
+    rev_g = _sf(stock.get("revenue_growth"))
+    eps_g = _sf(stock.get("eps_growth"))
+    fcf_g = _sf(stock.get("fcf_growth"))
+    de    = _sf(stock.get("de_ratio"))
+    cr    = _sf(stock.get("current_ratio"))
+    az    = _sf(stock.get("altman_z"))
+    pio   = stock.get("piotroski_score")
+    pe    = _sf(stock.get("pe_ratio"))
+    dy    = _sf(stock.get("dividend_yield"))
+    mc    = _sf(stock.get("market_cap"))
+    sector = stock.get("sector") or "_default"
+
+    # ── Business Quality Tier ─────────────────────────────────────────────
+    q = 0
+    if roe  is not None: q += 3 if roe  > 0.20 else 2 if roe  > 0.15 else 1 if roe  > 0.08 else 0
+    if roic is not None: q += 3 if roic > 0.15 else 2 if roic > 0.10 else 1 if roic > 0.05 else 0
+    if gm   is not None: q += 3 if gm   > 0.50 else 2 if gm   > 0.35 else 1 if gm   > 0.20 else 0
+    if pm   is not None: q += 2 if pm   > 0.15 else 1 if pm   > 0.08 else 0
+    quality_tier = "Premium" if q >= 8 else "High Quality" if q >= 5 else "Average" if q >= 2 else "Below Average"
+
+    # ── Growth Profile ────────────────────────────────────────────────────
+    g_primary = rev_g if rev_g is not None else eps_g
+    growth_profile = (
+        "High Growth"     if g_primary is not None and g_primary > 0.20 else
+        "Moderate Growth" if g_primary is not None and g_primary > 0.08 else
+        "Slow Growth"     if g_primary is not None and g_primary > 0    else
+        "Declining"       if g_primary is not None                       else
+        "Unknown"
+    )
+
+    growth_signals = []
+    if rev_g is not None:
+        if   rev_g > 0.20: growth_signals.append(f"Revenue growing rapidly at {rev_g*100:.1f}% YoY — strong demand or market share gains.")
+        elif rev_g > 0.08: growth_signals.append(f"Steady revenue growth of {rev_g*100:.1f}% YoY — business expanding ahead of GDP.")
+        elif rev_g > 0:    growth_signals.append(f"Modest revenue growth of {rev_g*100:.1f}% — mature market or competitive pressure on top line.")
+        else:              growth_signals.append(f"Revenue declining {rev_g*100:.1f}% — requires investigation of competitive dynamics.")
+    if eps_g is not None and eps_g > 0 and (rev_g is None or eps_g > rev_g):
+        growth_signals.append(f"EPS growing ({eps_g*100:.1f}%) faster than revenue — margin expansion and operating leverage at work.")
+    if fcf_g is not None and fcf_g > 0.10:
+        growth_signals.append(f"FCF growing {fcf_g*100:.1f}% — accelerating cash generation supports buybacks and reinvestment.")
+
+    # ── Financial Fortress ────────────────────────────────────────────────
+    f = 0
+    if az  is not None: f += 3 if az  > 2.99 else 1 if az  > 1.81 else 0
+    if pio is not None: f += 3 if pio >= 7    else 1 if pio >= 5   else 0
+    if de  is not None: f += 2 if de  < 0.50  else 1 if de  < 1.0  else 0
+    if cr  is not None: f += 1 if cr  > 1.50  else 0
+    fortress_tier = "Fortress" if f >= 7 else "Stable" if f >= 4 else "Stretched" if f >= 2 else "Distressed"
+
+    fortress_signals = []
+    if az  is not None:
+        fortress_signals.append(
+            f"Altman Z {az:.2f} — {'Safe Zone, low distress risk' if az > 2.99 else 'Grey Zone, monitor balance sheet' if az > 1.81 else 'Distress Zone — assess debt sustainability'}"
+        )
+    if pio is not None:
+        fortress_signals.append(
+            f"Piotroski F-Score {pio}/9 — {'strong across all quality dimensions' if pio >= 7 else 'solid on most accounting measures' if pio >= 5 else 'several quality signals are weak'}"
+        )
+    if de is not None:
+        fortress_signals.append(
+            f"D/E {de:.2f} — {'conservative; ample capacity for strategic investment' if de < 0.5 else 'moderate; manageable debt load' if de < 1.0 else 'elevated; monitor interest coverage' if de < 2.0 else 'high leverage; significant financial risk'}"
+        )
+    if cr is not None:
+        fortress_signals.append(
+            f"Current ratio {cr:.2f} — {'strong liquidity' if cr > 2.0 else 'adequate coverage' if cr > 1.0 else 'tight — may face short-term cash pressure'}"
+        )
+
+    # ── Capital Efficiency ────────────────────────────────────────────────
+    efficiency_signals = []
+    if roic is not None:
+        spread = roic - 0.09  # vs estimated WACC of 9%
+        if   spread > 0.10: efficiency_signals.append(f"ROIC {roic*100:.1f}% — creates substantial value above cost of capital; hallmark of a high-quality compounder.")
+        elif spread > 0.05: efficiency_signals.append(f"ROIC {roic*100:.1f}% — earns a meaningful premium above typical WACC (~9%).")
+        elif spread > 0:    efficiency_signals.append(f"ROIC {roic*100:.1f}% — marginally above cost of capital; value creation is limited.")
+        else:               efficiency_signals.append(f"ROIC {roic*100:.1f}% — below estimated cost of capital; business may be destroying value.")
+    if roe is not None:
+        if   roe > 0.20: efficiency_signals.append(f"ROE {roe*100:.1f}% — exceptional return on shareholder equity.")
+        elif roe > 0.15: efficiency_signals.append(f"ROE {roe*100:.1f}% — above-average profitability relative to equity base.")
+        elif roe > 0.10: efficiency_signals.append(f"ROE {roe*100:.1f}% — moderate return on equity.")
+    if gm is not None and gm > 0.40:
+        efficiency_signals.append(f"Gross margin {gm*100:.1f}% — high margins signal pricing power and a differentiated product or service.")
+
+    # ── Investment Thesis ─────────────────────────────────────────────────
+    thesis = []
+    if quality_tier in ("Premium", "High Quality"):
+        parts = []
+        if roe:  parts.append(f"ROE {roe*100:.1f}%")
+        if roic: parts.append(f"ROIC {roic*100:.1f}%")
+        thesis.append(f"High-quality business with durable profitability ({', '.join(parts)}) — strong signal of competitive advantage.")
+    if g_primary and g_primary > 0.08:
+        thesis.append(f"{growth_profile} at {g_primary*100:.1f}% — expanding market presence supports long-term compounding.")
+    if gm and gm > 0.40:
+        thesis.append(f"High gross margins ({gm*100:.1f}%) demonstrate pricing power and differentiated positioning.")
+    if fortress_tier in ("Fortress", "Stable"):
+        thesis.append(f"{fortress_tier} balance sheet provides strategic flexibility for M&A, buybacks, and organic investment.")
+    if dy and dy > 0.02:
+        thesis.append(f"Dividend yield {dy*100:.1f}% provides income support; sustainable payout enhances total return.")
+    if mc:
+        size = "large-cap" if mc > 10e9 else "mid-cap" if mc > 2e9 else "small-cap"
+        thesis.append(f"${mc/1e9:.1f}B {size} — sufficient scale and liquidity for institutional investment.")
+    if not thesis:
+        thesis.append("Insufficient data to build a complete investment thesis. Refresh stock data to populate metrics.")
+
+    # ── Key Risks ─────────────────────────────────────────────────────────
+    risks = []
+    if rev_g is not None and rev_g < 0:
+        risks.append(f"Revenue declining {abs(rev_g)*100:.1f}% — top-line contraction raises competitive and market share concerns.")
+    if de is not None and de > 1.5:
+        risks.append(f"High leverage (D/E {de:.2f}) increases vulnerability to rate rises and earnings shortfalls.")
+    if pe is not None and pe > 40:
+        risks.append(f"Premium P/E of {pe:.1f}x leaves little room for execution mistakes; growth must be sustained.")
+    if pm is not None and 0 < pm < 0.05:
+        risks.append(f"Thin net margins ({pm*100:.1f}%) — any cost pressure or pricing erosion quickly hits profitability.")
+    if pm is not None and pm < 0:
+        risks.append("Loss-making at the net level — monitor cash burn runway and path to profitability.")
+    if pio is not None and pio <= 2:
+        risks.append("Low Piotroski F-Score — deterioration across multiple accounting quality dimensions; elevated short-selling risk.")
+    if az is not None and az < 1.81:
+        risks.append(f"Altman Z {az:.2f} — in distress zone; assess refinancing capacity and liquidity.")
+    if not risks:
+        risks.append("No significant quantitative risk flags identified. Conduct qualitative review of competitive dynamics and management track record.")
+
+    sp = _SECTOR.get(sector) or _SECTOR["_default"]
+    return {
+        "quality_tier": quality_tier,
+        "growth_profile": growth_profile,
+        "fortress_tier": fortress_tier,
+        "efficiency_signals": efficiency_signals,
+        "growth_signals": growth_signals,
+        "fortress_signals": fortress_signals,
+        "investment_thesis": thesis,
+        "key_risks": risks,
+        "sector_context": sp["ctx"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Valuation Review
+# ---------------------------------------------------------------------------
+def valuation_review(stock: dict, fin: Optional[dict] = None) -> dict:
+    """
+    Multi-method fair value analysis with verdict and margin of safety.
+    fin: most recent annual Financial record (dict) for EPS, BVPS, FCF/share.
+    """
+    price     = _sf(stock.get("current_price"))
+    pe        = _sf(stock.get("pe_ratio"))
+    pb        = _sf(stock.get("pb_ratio"))
+    pfcf      = _sf(stock.get("pfcf_ratio"))
+    roe       = _sf(stock.get("roe"))
+    roic      = _sf(stock.get("roic"))
+    rev_g     = _sf(stock.get("revenue_growth"))
+    eps_g     = _sf(stock.get("eps_growth"))
+    dy        = _sf(stock.get("dividend_yield"))
+    dcf_up    = _sf(stock.get("dcf_upside"))
+    sector    = stock.get("sector") or "_default"
+
+    # From Financial record
+    eps = bvps = fcf_ps = ebitda_ps = net_cash_ps = None
+    if fin:
+        shares = _sf(fin.get("shares_outstanding"))
+        eps    = _sf(fin.get("eps_diluted")) or _sf(fin.get("eps"))
+        equity = _sf(fin.get("total_equity"))
+        fcf    = _sf(fin.get("fcf"))
+        ebitda = _sf(fin.get("ebitda"))
+        cash   = _sf(fin.get("cash")) or 0
+        debt   = _sf(fin.get("total_debt")) or 0
+        if equity and shares and shares > 0:
+            bvps = equity / shares
+        if fcf and shares and shares > 0:
+            fcf_ps = fcf / shares
+        if ebitda and shares and shares > 0:
+            ebitda_ps = ebitda / shares
+        if shares and shares > 0:
+            net_cash_ps = (cash - debt) / shares
+
+    sp = _SECTOR.get(sector) or _SECTOR["_default"]
+    fair_pe, fair_pfcf, fair_ev = sp["pe"], sp["pfcf"], sp["ev_ebitda"]
+
+    methods = []
+    fair_values = []
+
+    def _add(name, fv, confidence, notes):
+        if fv is not None and fv > 0 and price:
+            upside = round((fv / price - 1) * 100, 1)
+            methods.append({"name": name, "fair_value": round(fv, 2), "upside": upside, "confidence": confidence, "notes": notes})
+            fair_values.append(fv)
+
+    # 1. DCF (stored during refresh)
+    if dcf_up is not None and price:
+        _add("DCF (10% growth · 10% discount · 3% terminal)",
+             price * (1 + dcf_up), "Medium",
+             "10-year DCF on last FCF with default assumptions. Sensitive to growth rate — treat as base case only.")
+
+    # 2. Graham Number
+    if eps and eps > 0 and bvps and bvps > 0:
+        _add("Graham Number",
+             (22.5 * eps * bvps) ** 0.5, "High",
+             f"√(22.5 × EPS ${eps:.2f} × BVPS ${bvps:.2f}). Conservative intrinsic value for asset-backed businesses.")
+
+    # 3. Graham PE Formula
+    if eps and eps > 0:
+        g_pct = max(0, min((rev_g or eps_g or 0.05) * 100, 25))
+        _add("Graham PE (8.5 + 2g)",
+             eps * (8.5 + 2 * g_pct), "Medium",
+             f"EPS × (8.5 + 2×{g_pct:.1f}%). Graham's original formula for growth-adjusted earnings value.")
+
+    # 4. Sector P/E
+    if eps and eps > 0 and fair_pe:
+        _add(f"Sector P/E ({fair_pe}x)",
+             eps * fair_pe, "Medium",
+             f"EPS × {fair_pe}x, the typical fair multiple for {sector}. Relative-valuation benchmark.")
+
+    # 5. P/FCF
+    if fcf_ps and fcf_ps > 0 and fair_pfcf:
+        _add(f"P/FCF ({fair_pfcf}x)",
+             fcf_ps * fair_pfcf, "High",
+             f"FCF/share × {fair_pfcf}x. Less susceptible to accounting choices than earnings-based methods.")
+
+    # 6. EV/EBITDA
+    if ebitda_ps and fair_ev and net_cash_ps is not None:
+        ev_fv = ebitda_ps * fair_ev + net_cash_ps
+        _add(f"EV/EBITDA ({fair_ev}x)",
+             ev_fv, "High",
+             f"EBITDA/share × {fair_ev}x + net cash/share ${net_cash_ps:.2f}. Capital-structure-agnostic benchmark.")
+
+    # Fair value range & verdict
+    fv_range = None
+    verdict = "Insufficient Data"
+    mos = None
+
+    if fair_values and price:
+        fv_low  = round(min(fair_values), 2)
+        fv_mid  = round(sum(fair_values) / len(fair_values), 2)
+        fv_high = round(max(fair_values), 2)
+        fv_range = {"low": fv_low, "mid": fv_mid, "high": fv_high}
+        upside_to_mid = (fv_mid - price) / price
+        mos = round((fv_mid - price) / fv_mid * 100, 1)
+        verdict = (
+            "Deeply Undervalued" if upside_to_mid > 0.35 else
+            "Undervalued"        if upside_to_mid > 0.15 else
+            "Fairly Valued"      if upside_to_mid > -0.10 else
+            "Overvalued"         if upside_to_mid > -0.25 else
+            "Richly Priced"
+        )
+
+    # Key observations
+    obs = []
+    if pe and fair_pe:
+        diff = (pe - fair_pe) / fair_pe
+        if   diff < -0.30: obs.append(f"P/E {pe:.1f}x — trades at a {abs(diff)*100:.0f}% discount to the {sector} sector benchmark of {fair_pe}x. May indicate undervaluation or below-sector growth expectations.")
+        elif diff >  0.30: obs.append(f"P/E {pe:.1f}x — {diff*100:.0f}% premium to sector benchmark of {fair_pe}x. Sustained growth is required to justify the multiple.")
+        else:              obs.append(f"P/E {pe:.1f}x — broadly in line with the {sector} sector benchmark of {fair_pe}x.")
+    if pfcf and fair_pfcf:
+        fcf_yield = 1 / pfcf * 100
+        if pfcf < fair_pfcf * 0.80: obs.append(f"P/FCF {pfcf:.1f}x is attractive vs sector benchmark of {fair_pfcf}x — FCF yield of {fcf_yield:.1f}% offers a good return floor.")
+        elif pfcf > fair_pfcf * 1.5: obs.append(f"P/FCF {pfcf:.1f}x is elevated vs benchmark of {fair_pfcf}x — FCF yield of {fcf_yield:.1f}% is thin.")
+    if pb is not None and pb < 1.0:
+        obs.append(f"P/B {pb:.2f}x — stock trades below book value, creating potential asset-backed margin of safety.")
+    if roe and roic and roe > 0.20 and roic > 0.15:
+        obs.append(f"High ROE ({roe*100:.1f}%) + ROIC ({roic*100:.1f}%) justify a premium multiple — compounders often re-rate upward over time.")
+    if dy and dy > 0.03:
+        obs.append(f"Dividend yield {dy*100:.1f}% reduces effective cost basis and provides income cushion while waiting for re-rating.")
+    if not obs:
+        obs.append("Insufficient valuation data available. Refresh stock data to populate all metrics.")
+
+    return {
+        "methods": methods,
+        "fair_value_range": fv_range,
+        "verdict": verdict,
+        "margin_of_safety": mos,
+        "current_price": price,
+        "key_observations": obs,
+    }
