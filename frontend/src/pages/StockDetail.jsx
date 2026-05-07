@@ -6,10 +6,12 @@ import GuruScoreRing, { ScorePillar } from "../components/GuruScoreRing";
 import { MetricBadge } from "../components/Badge";
 import DCFCalculator from "../components/DCFCalculator";
 import SwotMoat from "../components/SwotMoat";
+import MarketResearch from "../components/MarketResearch";
+import ValuationReview from "../components/ValuationReview";
 import { RevenueChart, EPSChart, NetIncomeChart, FCFChart, DebtChart } from "../components/Charts";
 import { ProductSegmentCharts, GeoSegmentCharts } from "../components/SegmentCharts";
 
-const TABS = ["Valuation", "Profitability", "Growth", "Cash Flow", "Balance Sheet", "Analysis", "Insiders", "DCF"];
+const TABS = ["Valuation", "Profitability", "Growth", "Cash Flow", "Balance Sheet", "Analysis", "Research", "Insiders", "DCF"];
 
 function Row({ label, value }) {
   return (
@@ -578,6 +580,14 @@ export default function StockDetail() {
             <ProductSegmentCharts data={segments} isLoading={segmentsLoading} />
             <GeoSegmentCharts data={segments} isLoading={segmentsLoading} />
             <SwotMoat ticker={ticker} />
+          </div>
+        )}
+
+        {/* RESEARCH */}
+        {tab === "Research" && (
+          <div className="flex flex-col gap-6">
+            <MarketResearch ticker={ticker} />
+            <ValuationReview ticker={ticker} />
           </div>
         )}
 

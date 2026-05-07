@@ -23,6 +23,12 @@ export const fetchInsiders = (ticker) =>
 export const fetchAnalysis = (ticker) =>
   api.get(`/stocks/${ticker}/analysis`).then((r) => r.data);
 
+export const fetchResearch = (ticker) =>
+  api.get(`/stocks/${ticker}/research`).then((r) => r.data);
+
+export const fetchValuationReview = (ticker) =>
+  api.get(`/stocks/${ticker}/valuation-review`).then((r) => r.data);
+
 export const fetchMultiplesHistory = (ticker) =>
   api.get(`/stocks/${ticker}/multiples-history`).then((r) => r.data);
 

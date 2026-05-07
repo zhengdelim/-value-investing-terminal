@@ -69,14 +69,22 @@ export default function Dashboard() {
         s.ticker.toLowerCase().includes(search.toLowerCase()) ||
         s.name?.toLowerCase().includes(search.toLowerCase()))
     : stocks ?? [];
-  const displayed = scoreFilter === "undervalued"
-    ? baseList.filter(
-        (s) => s.guru_score != null && s.guru_score > 80
-             && s.dcf_upside != null && s.dcf_upside > 0.30
-             && s.roe != null && s.roe > 0.15,
-      )
+  const displayed =
+    scoreFilter === "undervalued"
+      ? baseList.filter(
+          (s) => s.guru_score != null && s.guru_score > 80
+               && s.dcf_upside != null && s.dcf_upside > 0.30
+               && s.roe != null && s.roe > 0.15,
+        )
     : scoreFilter === "quality"
-    ? baseList.filter((s) => s.guru_score != null && s.guru_score >= 70)
+      ? baseList.filter((s) => s.guru_score != null && s.guru_score >= 70)
+    : scoreFilter === "deepvalue"
+      ? baseList.filter(
+          (s) => s.pe_ratio != null && s.pe_ratio > 0 && s.pe_ratio < 15
+               && s.pb_ratio != null && s.pb_ratio > 0 && s.pb_ratio < 1.5,
+        )
+    : scoreFilter === "dividend"
+      ? baseList.filter((s) => s.dividend_yield != null && s.dividend_yield >= 0.02)
     : baseList;
 
   const showSidebar = activeTab === "screener";

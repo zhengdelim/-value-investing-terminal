@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchStock, fetchFinancials, fetchDCF, fetchInsiders, fetchMultiplesHistory, fetchSegments } from "../lib/api";
+import { fetchStock, fetchFinancials, fetchDCF, fetchInsiders, fetchMultiplesHistory, fetchSegments, fetchResearch, fetchValuationReview } from "../lib/api";
 
 export function useStockDetail(ticker) {
   return useQuery({
@@ -58,6 +58,24 @@ export function useSegments(ticker) {
   return useQuery({
     queryKey: ["segments", ticker],
     queryFn: () => fetchSegments(ticker),
+    enabled: !!ticker,
+    staleTime: 1000 * 60 * 60 * 24,
+  });
+}
+
+export function useResearch(ticker) {
+  return useQuery({
+    queryKey: ["research", ticker],
+    queryFn: () => fetchResearch(ticker),
+    enabled: !!ticker,
+    staleTime: 1000 * 60 * 60 * 24,
+  });
+}
+
+export function useValuationReview(ticker) {
+  return useQuery({
+    queryKey: ["valuation-review", ticker],
+    queryFn: () => fetchValuationReview(ticker),
     enabled: !!ticker,
     staleTime: 1000 * 60 * 60 * 24,
   });
