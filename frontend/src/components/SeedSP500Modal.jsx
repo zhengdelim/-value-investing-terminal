@@ -20,10 +20,10 @@ const MODES = {
   },
   us: {
     label: "All US Stocks",
-    badge: "~8,000+ stocks",
+    badge: "~7,500+ stocks",
     badgeColor: "text-yellow border-yellow/30 bg-yellow/10",
-    description: "Bulk-seeds all NYSE + NASDAQ + AMEX stocks with basic data (name, price, market cap, sector). Quality metrics load on first click. Takes ~30 sec.",
-    warning: "Basic seed only — quality filters (ROE, ROIC, etc.) will show '—' until a stock is individually refreshed.",
+    description: "Seeds all NYSE + Nasdaq stocks from SEC EDGAR (free, no API quota). Adds ticker + name + exchange as stubs. Quality metrics load on first click. Takes ~5 sec.",
+    warning: "Stub seed only — quality filters (ROE, ROIC, etc.) show '—' until a stock is individually refreshed.",
     startFn: startUsStocksSeed,
     progressFn: fetchUsStocksProgress,
     progressKey: "us-stocks-progress",
