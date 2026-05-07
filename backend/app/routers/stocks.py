@@ -362,6 +362,30 @@ async def _refresh_stock(ticker: str, db: Session) -> Stock:
     return stock
 
 
+# Secondary class → primary class; drop secondary when primary is also present
+_SHADOW_TO_PRIMARY: dict[str, str] = {
+    "GOOG":  "GOOGL",   # Alphabet C (no vote) → A (voting)
+    "BRK.A": "BRK.B",   # Berkshire A → B (more accessible)
+    "FOX":   "FOXA",    # Fox C → A
+    "NWS":   "NWSA",    # News Corp B → A
+    "LEN.B": "LEN",     # Lennar B → A
+    "PARAA": "PARA",    # Paramount A → B
+    "CMCSK": "CMCSA",   # Comcast K → A
+    "LSXMB": "LSXMA",
+    "LSXMK": "LSXMA",
+    "BATRK": "BATRA",
+}
+
+
+def _dedup(stocks: list) -> list:
+    tickers_in_result = {s.ticker for s in stocks}
+    return [
+        s for s in stocks
+        if s.ticker not in _SHADOW_TO_PRIMARY
+        or _SHADOW_TO_PRIMARY[s.ticker] not in tickers_in_result
+    ]
+
+
 @router.get("", response_model=list[StockSummary])
 async def screener(
     pe_max: Optional[float] = Query(None),
@@ -432,7 +456,7 @@ async def screener(
         .limit(limit)
         .all()
     )
-    return [StockSummary.model_validate(s) for s in stocks]
+    return _dedup([StockSummary.model_validate(s) for s in stocks])
 
 
 @router.get("/search")
